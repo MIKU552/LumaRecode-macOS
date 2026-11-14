@@ -1,0 +1,79 @@
+import Foundation
+import XCTest
+@testable import LumaCore
+
+final class PlannerTests: XCTestCase {
+    private func media(
+        color: SourceColor = .sdr, dynamic: Bool = false,
+        depth: Int = 8
+    ) -> MediaInfo {
+        MediaInfo(
+            url: URL(fileURLWithPath: "/tmp/source.mov"), codec: "hevc",
+            width: 3840, height: 2160, duration: 60, frameRate: 29.97,
+            pixelFormat: depth > 8 ? "yuv420p10le" : "yuv420p",
+            bitDepth: depth, primaries: "bt709", transfer: "bt709",
+            matrix: "bt709", colorRange: "tv", audioCodecs: ["aac"],
+            sourceColor: color, dynamicHDR: dynamic
+        )
+    }
+    private func tools() throws -> MediaTools {
+        // Tests only construct arguments. No FFmpeg process is started.
+        try MediaTools(ffmpeg: URL(fileURLWithPath: "/bin/echo"),
+                       ffprobe: URL(fileURLWithPath: "/bin/echo"))
+    }
+    func testSoftwareArchiveKeepsOriginalPreset() throws {
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: media(),
+            selection: EncodeSelection(purpose: .archive, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/output.mkv")
+        )
+        XCTAssertTrue(plan.arguments.contains("libx265"))
+        XCTAssertTrue(plan.arguments.contains("23"))
+        XCTAssertTrue(plan.arguments.contains("pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1"))
+        XCTAssertTrue(plan.arguments.contains("copy"))
+    }
+    func testBlocksUnportedDynamicHDR() throws {
+        XCTAssertThrowsError(try EncodingPlanner.plan(
+            tools: tools(), media: media(color: .pq, dynamic: true, depth: 10),
+            selection: EncodeSelection(), destination: URL(fileURLWithPath: "/tmp/out.mkv")
+        ))
+    }
+    func testNativeHardwareForHEVC() throws {
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: media(),
+            selection: EncodeSelection(purpose: .share, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/out.mp4")
+        )
+        XCTAssertTrue(plan.arguments.contains("hevc_videotoolbox"))
+        XCTAssertTrue(plan.arguments.contains("65"))
+        XCTAssertTrue(plan.arguments.contains("0")) // -allow_sw 0
+    }
+    func testNoUnverifiedAV1Hardware() throws {
+        XCTAssertThrowsError(try EncodingPlanner.plan(
+            tools: tools(), media: media(),
+            selection: EncodeSelection(purpose: .share, codec: .av1),
+            destination: URL(fileURLWithPath: "/tmp/out.mp4")
+        ))
+    }
+    func testSensibleFileName() {
+        let url = EncodingPlanner.destination(
+            for: media(), selection: EncodeSelection(purpose: .archive, codec: .hevc),
+            directory: URL(fileURLWithPath: "/tmp")
+        )
+        XCTAssertEqual(url.lastPathComponent, "source_SDR_hevc_archive.mkv")
+    }
+    func testProbeParsing() throws {
+        let json = """
+        {"format":{"duration":"4.50"},"streams":[
+          {"codec_type":"video","codec_name":"hevc","width":1920,"height":1080,
+           "pix_fmt":"yuv420p10le","avg_frame_rate":"30000/1001",
+           "color_transfer":"arib-std-b67","color_primaries":"bt2020","color_space":"bt2020nc"},
+          {"codec_type":"audio","codec_name":"aac"}]}
+        """
+        let result = try MediaProbe.parse(Data(json.utf8), url: URL(fileURLWithPath: "/tmp/x.mp4"))
+        XCTAssertEqual(result.sourceColor, .hlg)
+        XCTAssertEqual(result.bitDepth, 10)
+        XCTAssertEqual(result.duration, 4.5)
+        XCTAssertEqual(result.audioCodecs, ["aac"])
+    }
+}
