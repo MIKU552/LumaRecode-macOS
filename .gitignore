@@ -1,0 +1,18 @@
+# Xcode and Swift
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+macOS/LumaRecode.xcodeproj/
+macOS/Packages/LumaCore/.build/
+macOS/Packages/LumaCore/.swiftpm/
+# Local generated media and products
+dist/
+*.mov
+*.mp4
+*.mkv
+*.heic
+*.jpg
+*.png

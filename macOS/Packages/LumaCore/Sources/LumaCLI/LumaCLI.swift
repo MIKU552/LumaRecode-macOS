@@ -1,6 +1,12 @@
 import Foundation
 import LumaCore
 
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
+
 @main
 struct LumaCLI {
     private static func value(_ key: String, args: [String]) -> String? {
@@ -94,15 +100,15 @@ struct LumaCLI {
                 overwrite: words.contains("--overwrite"),
                 onProgress: { p in
                     emit("progress", ["percent": p.fraction * 100,
-                                       "position_seconds": p.seconds,
-                                       "duration_seconds": p.duration,
-                                       "fps": p.fps as Any? ?? NSNull()])
+                                      "position_seconds": p.seconds,
+                                      "duration_seconds": p.duration,
+                                      "fps": p.fps as Any? ?? NSNull()])
                 }
             )
             emit("done", ["output": result.path])
         } catch {
             emit("error", ["message": error.localizedDescription])
-            Foundation.exit(1)
+            exit(1)
         }
     }
 }

@@ -1,0 +1,75 @@
+name: macOS 27 Native Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core-tests:
+    name: Swift Core Unit Tests
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm macOS 27 toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+      - name: Run Swift core tests
+        run: swift test --package-path macOS/Packages/LumaCore
+
+  native-app:
+    name: Build Native SwiftUI App + CLI
+    needs: core-tests
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+      - name: Generate native Xcode project
+        run: |
+          xcodegen generate --spec macOS/project.yml
+          test -d macOS/LumaRecode.xcodeproj
+      - name: Build macOS application
+        run: |
+          xcodebuild \
+            -project macOS/LumaRecode.xcodeproj \
+            -scheme LumaRecode \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/LumaDerived" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Build native Swift CLI
+        run: |
+          swift build --package-path macOS/Packages/LumaCore \
+            --configuration release --product lumarecode
+      - name: Package unsigned developer artifacts
+        run: |
+          mkdir -p dist
+          APP="$RUNNER_TEMP/LumaDerived/Build/Products/Release/LumaRecode.app"
+          test -d "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" dist/LumaRecode-macOS27-arm64-unsigned.zip
+          CLI="$(swift build --package-path macOS/Packages/LumaCore \
+            --configuration release --show-bin-path)/lumarecode"
+          cp "$CLI" dist/lumarecode-macOS27-arm64
+          chmod +x dist/lumarecode-macOS27-arm64
+          file dist/lumarecode-macOS27-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LumaRecode-macOS27-native-dev
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
