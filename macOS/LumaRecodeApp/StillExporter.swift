@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import ImageIO
+import LumaCore
 import UniformTypeIdentifiers
 
 /// Exports *SDR* frames using Apple's system frameworks. HDR HEIC gain-map
