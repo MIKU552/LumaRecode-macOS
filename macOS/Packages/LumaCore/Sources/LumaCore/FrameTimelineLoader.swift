@@ -80,7 +80,6 @@ public enum FrameTimelineLoader {
     private static func read(
         tools: MediaTools, media: MediaInfo, packets: Bool
     ) async throws -> [FramePoint]? {
-        let type = packets ? "packet" : "frame"
         let fields = packets
             ? "packet=pts,duration,flags:packet_side_data="
             : "frame=best_effort_timestamp,duration,key_frame:frame_side_data="
