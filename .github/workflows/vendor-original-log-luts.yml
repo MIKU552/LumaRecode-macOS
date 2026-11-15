@@ -1,0 +1,56 @@
+name: One-Time Vendor Original Camera Log LUTs
+
+on:
+  push:
+    branches:
+      - chore/vendor-log-luts-2026-11-15
+
+permissions:
+  contents: write
+
+jobs:
+  vendor-original-luts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Retrieve tested LUTs from original Windows repository
+        shell: bash
+        env:
+          ORIGINAL_COMMIT: 85b5bd2674d7071e2de5c8785334c50524b9a15b
+        run: |
+          set -euo pipefail
+          destination="macOS/Packages/LumaCore/Sources/LumaCore/Resources"
+          mkdir -p "$destination"
+          while read -r expected asset; do
+            echo "Copying verified Windows LUT: $asset"
+            curl --fail --location --retry 3 --silent --show-error \
+              "https://raw.githubusercontent.com/MIKU552/LumaRecode/$ORIGINAL_COMMIT/Assets/$asset" \
+              --output "$destination/$asset"
+            actual="$(git hash-object "$destination/$asset")"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "HASH MISMATCH for $asset: expected $expected, got $actual" >&2
+              exit 1
+            fi
+            test "$(wc -c < "$destination/$asset")" -gt 7000000
+          done <<'LUTS'
+          f94ce763c0f6c8921ad2b8963730a1298f942888 Apple_Log_to_Rec2100_HLG.cube
+          3409217fafcec1a1a584fd99d4bb0897a1ffac6d Apple_Log_2_to_Rec2100_HLG.cube
+          24d111efcdb8a82f08832345ce2a7ee09ec23950 DJI_Osmo_DLogM_to_Rec2100_HLG_BT2408_Neutral.cube
+          6784ff22d8cb8a856f24578daba1060a3ba62419 REDMI_K90_MiLog_to_Rec2100_HLG.cube
+          c323186ff555de8c040b665d1ae9c49d01c3f370 Samsung_Log_to_Rec2100_HLG.cube
+          LUTS
+          git config user.name MIKU552
+          git config user.email '61218399+MIKU552@users.noreply.github.com'
+          git add "$destination"/*.cube
+          if git diff --cached --quiet; then
+            echo "Already vendored; no change."
+            exit 0
+          fi
+          git commit -m "feat(color): vendor five original camera Log to HLG LUTs" \
+            -m "Identical, hash-verified LUTs from original LumaRecode." \
+            -m "Co-authored-by: Codex <codex@openai.com>"
+          git push origin HEAD:chore/vendor-log-luts-2026-11-15
