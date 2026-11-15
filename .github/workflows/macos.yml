@@ -105,8 +105,14 @@ jobs:
         env:
           LUMA_LIVE_PHOTO_CI: "1"
         run: |
-          swift test --package-path macOS/Packages/LumaCore \
-            --filter AppleLivePhotoTests/testNativeApplePairFromRealSDRMovie
+          python3 - <<'PY'
+          import subprocess
+          subprocess.run(
+              ["swift", "test", "--package-path", "macOS/Packages/LumaCore",
+               "--filter", "AppleLivePhotoTests/testNativeApplePairFromRealSDRMovie"],
+              check=True, timeout=180,
+          )
+          PY
 
       - name: Verify PQ video to native HEIC10 pipeline
         env:

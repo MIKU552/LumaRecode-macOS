@@ -14,6 +14,12 @@ import Photos
 public enum AppleLivePhotoExporter {
     private static let stillIdentifier = "mdta/com.apple.quicktime.still-image-time"
 
+    /// CI-only stage markers for diagnosing native AVFoundation stalls.
+    private static func diagnostics(_ stage: String) {
+        guard ProcessInfo.processInfo.environment["LUMA_LIVE_PHOTO_CI"] == "1" else { return }
+        FileHandle.standardError.write(Data("[LivePhoto] \(stage)\n".utf8))
+    }
+
     public static func export(
         from source: MediaInfo,
         selectedTime: Double,
@@ -70,10 +76,12 @@ public enum AppleLivePhotoExporter {
         let trim = temporary.appendingPathComponent("clip.mov")
         let photo = temporary.appendingPathComponent("still.jpg")
         let movie = temporary.appendingPathComponent("paired.mov")
+        diagnostics("begin native clip creation")
         let created = try await create(
             from: source.url, window: window,
             identifier: identifier, clip: trim, still: photo, movie: movie
         )
+        diagnostics("start stored-pair verification")
         try await LivePhotoPairVerifier.verify(
             still: photo, movie: movie, expectedIdentifier: identifier.uuidString,
             expectedStillTime: created
@@ -111,6 +119,7 @@ public enum AppleLivePhotoExporter {
             duration: CMTime(seconds: window.duration, preferredTimescale: 60000)
         )
         try await session.export(to: clip, as: .mov)
+        diagnostics("AVAssetExportSession clip finished")
         try Task.checkCancellation()
         let clipped = AVURLAsset(url: clip)
         let generator = AVAssetImageGenerator(asset: clipped)
@@ -120,6 +129,7 @@ public enum AppleLivePhotoExporter {
         let frame = try await generator.image(
             at: CMTime(seconds: window.stillTime, preferredTimescale: 60000)
         )
+        diagnostics("AVAssetImageGenerator poster finished")
         let posterTime = CMTimeGetSeconds(frame.actualTime)
         guard posterTime.isFinite, posterTime >= 0 else {
             throw LumaError.validationFailed("Apple image generator returned an invalid still timestamp.")
@@ -127,10 +137,12 @@ public enum AppleLivePhotoExporter {
         try LivePhotoStillMetadata.writeJPEG(
             frame.image, identifier: identifier, to: still
         )
+        diagnostics("start paired MOV writing")
         try await writePairedMovie(
             from: clipped, identifier: identifier.uuidString,
             stillTime: frame.actualTime, destination: movie
         )
+        diagnostics("paired MOV writing finished")
         return posterTime
     }
 
@@ -227,7 +239,9 @@ public enum AppleLivePhotoExporter {
         do {
             try writer.start()
             writer.startSession(atSourceTime: .zero)
+            diagnostics("start timed metadata receiver append")
             try await metadataReceiver.append(timedGroup)
+            diagnostics("timed metadata receiver append finished")
             metadataReceiver.finish()
 
             // Interleave compressed video and audio samples by their source
