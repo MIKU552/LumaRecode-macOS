@@ -248,7 +248,7 @@ public enum AppleLivePhotoExporter {
         let timedGroup = AVTimedMetadataGroup(
             items: [imageTime],
             timeRange: CMTimeRange(
-                start: stillTime, duration: CMTime(value: 1, timescale: 600)
+                start: stillTime, duration: CMTime(value: 1, timescale: 30)
             )
         )
 
@@ -296,12 +296,16 @@ public enum AppleLivePhotoExporter {
         metadataReceiver: AVAssetWriterInput.MetadataReceiver,
         timedGroup: AVTimedMetadataGroup, writer: AVAssetWriter
     ) async throws {
-        // Metadata is appended before the corresponding sample timestamp;
-        // retry during writing if the muxer is not yet ready.
-        var metadataWritten = try metadataReceiver.appendImmediately(timedGroup)
-        diagnostics("timed metadata initially accepted: \(metadataWritten)")
+        // Keep the timed metadata at its actual still frame PTS, but defer
+        // submitting it until the MOV writer has seen real media samples.
+        // Some muxers can block video/audio backpressure when a metadata
+        // sample with a future timestamp is written before both tracks.
+        var metadataWritten = false
+        diagnostics("interleaver: fetching first video sample")
         var video = videoOutput.copyNextSampleBuffer()
+        diagnostics("interleaver: fetching first audio sample")
         var audio = audioOutput?.copyNextSampleBuffer()
+        diagnostics("interleaver: inputs primed video=\(video != nil) audio=\(audio != nil)")
         var videoCount = 0
         var audioCount = 0
 
@@ -322,14 +326,24 @@ public enum AppleLivePhotoExporter {
             if writeVideo, let sample = video {
                 try await append(sample, to: videoInput, writer: writer)
                 videoCount += 1
+                if videoCount == 1 || videoCount.isMultiple(of: 32) {
+                    diagnostics("interleaver: video samples written=\(videoCount)")
+                }
                 video = videoOutput.copyNextSampleBuffer()
             } else if let sample = audio, let audioInput {
                 try await append(sample, to: audioInput, writer: writer)
                 audioCount += 1
+                if audioCount == 1 || audioCount.isMultiple(of: 64) {
+                    diagnostics("interleaver: audio samples written=\(audioCount)")
+                }
                 audio = audioOutput?.copyNextSampleBuffer()
             }
-            if !metadataWritten {
+            if !metadataWritten && videoCount > 0
+                && (audioInput == nil || audioCount > 0) {
                 metadataWritten = try metadataReceiver.appendImmediately(timedGroup)
+                if metadataWritten {
+                    diagnostics("interleaver: metadata accepted after initial A/V samples")
+                }
             }
         }
         guard metadataWritten else {
@@ -352,10 +366,22 @@ public enum AppleLivePhotoExporter {
         _ sample: CMSampleBuffer, to input: AVAssetWriterInput,
         writer: AVAssetWriter
     ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(12))
+        var reportedWait = false
         while !input.isReadyForMoreMediaData {
             guard writer.status == .writing else {
                 throw LumaError.processFailed(
                     writer.error?.localizedDescription ?? "Live Photo writer stopped accepting samples."
+                )
+            }
+            if !reportedWait {
+                diagnostics("interleaver: A/V input backpressure; waiting for writable muxer")
+                reportedWait = true
+            }
+            guard ContinuousClock.now < deadline else {
+                throw LumaError.processFailed(
+                    "AVAssetWriter stalled waiting for sample readiness; "
+                    + "refusing to hang the Live Photo export."
                 )
             }
             try Task.checkCancellation()
