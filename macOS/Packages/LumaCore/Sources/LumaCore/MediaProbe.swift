@@ -117,6 +117,8 @@ public enum MediaProbe {
             .map { string($0, "side_data_type") }
         let hasStaticMetadata = metadataNames.contains("Mastering display metadata")
             || metadataNames.contains("Content light level metadata")
+        let hdrMetadata = hasStaticMetadata
+            ? HDRStaticMetadata.parse(streamSideData + frameSideData) : nil
         let display = streamSideData.first {
             string($0, "side_data_type") == "Display Matrix"
         }
@@ -145,6 +147,7 @@ public enum MediaProbe {
             codecTag: codecTag,
             displayRotation: display == nil ? tagRotation : displayRotation,
             staticHDRMetadataPresent: hasStaticMetadata,
+            hdrStaticMetadata: hdrMetadata,
             timeBase: string(video, "time_base"),
             isInterlaced: interlaced,
             detectedLogProfile: detected
