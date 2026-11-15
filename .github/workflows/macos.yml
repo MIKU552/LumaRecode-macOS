@@ -133,14 +133,22 @@ jobs:
       - name: Verify Photos accepts Apple JPEG/MOV paired resources
         env:
           LUMA_LIVE_PHOTO_CI: "1"
+          LUMA_LIVE_TRACE_FILE: ${{ runner.temp }}/luma-live-photo-stages.log
         run: |
           python3 - <<'PY'
+          import os
+          import pathlib
           import subprocess
-          subprocess.run(
-              ["swift", "test", "--package-path", "macOS/Packages/LumaCore",
-               "--filter", "AppleLivePhotoTests/testNativeApplePairFromRealSDRMovie"],
-              check=True, timeout=180,
-          )
+          trace = pathlib.Path(os.environ["LUMA_LIVE_TRACE_FILE"])
+          try:
+              subprocess.run(
+                  ["swift", "test", "--package-path", "macOS/Packages/LumaCore",
+                   "--filter", "AppleLivePhotoTests/testNativeApplePairFromRealSDRMovie"],
+                  check=True, timeout=240,
+              )
+          finally:
+              print("=== Persisted native Live Photo stages ===", flush=True)
+              print(trace.read_text() if trace.exists() else "No stage markers written.", flush=True)
           PY
 
   native-app:

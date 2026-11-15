@@ -12,6 +12,7 @@ final class AppleLivePhotoTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["LUMA_LIVE_PHOTO_CI"] == "1" else {
             throw XCTSkip("Real native Live Photo pair uses the macOS FFmpeg integration job.")
         }
+        AppleLivePhotoExporter.diagnostics("test: starting integration")
         let tools = try MediaTools.resolve()
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("luma-live-integration-\(UUID().uuidString)")
@@ -29,11 +30,14 @@ final class AppleLivePhotoTests: XCTestCase {
             "-movflags", "+faststart", source.path
         ], timeout: 90)
         XCTAssertEqual(command.code, 0)
+        AppleLivePhotoExporter.diagnostics("test: synthetic FFmpeg source generated")
         let media = try await MediaProbe.inspect(tools: tools, url: source)
         XCTAssertEqual(media.sourceColor, .sdr)
+        AppleLivePhotoExporter.diagnostics("test: starting native export")
         let pair = try await AppleLivePhotoExporter.export(
             from: media, selectedTime: 1.75, to: folder, name: "live-sdr"
         )
+        AppleLivePhotoExporter.diagnostics("test: native export succeeded")
         XCTAssertTrue(FileManager.default.fileExists(atPath: pair.still.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: pair.movie.path))
         XCTAssertEqual(try LivePhotoStillMetadata.identifier(in: pair.still),
@@ -60,6 +64,7 @@ final class AppleLivePhotoTests: XCTestCase {
 
         // The pair is only considered complete once Photos can construct the
         // in-memory Live Photo without adding it to a user's library.
+        AppleLivePhotoExporter.diagnostics("test: requesting Photos in-memory Live Photo")
         let expectation = expectation(description: "Apple Photos loads actual paired resources")
         let requestID = PHLivePhoto.request(
             withResourceFileURLs: [pair.still, pair.movie],
@@ -71,6 +76,7 @@ final class AppleLivePhotoTests: XCTestCase {
             expectation.fulfill()
         }
         await fulfillment(of: [expectation], timeout: 30)
+        AppleLivePhotoExporter.diagnostics("test: Photos callback/expectation returned")
         PHLivePhoto.cancelRequest(withRequestID: requestID)
     }
 

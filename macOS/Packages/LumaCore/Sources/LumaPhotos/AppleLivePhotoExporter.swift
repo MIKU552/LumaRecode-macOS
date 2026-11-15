@@ -14,10 +14,28 @@ import Photos
 public enum AppleLivePhotoExporter {
     private static let stillIdentifier = "mdta/com.apple.quicktime.still-image-time"
 
-    /// CI-only stage markers for diagnosing native AVFoundation stalls.
-    private static func diagnostics(_ stage: String) {
-        guard ProcessInfo.processInfo.environment["LUMA_LIVE_PHOTO_CI"] == "1" else { return }
-        FileHandle.standardError.write(Data("[LivePhoto] \(stage)\n".utf8))
+    /// Independent CI trace log remains readable if XCTest hangs and the
+    /// runner kills the test process before buffered console output flushes.
+    static func diagnostics(_ stage: String) {
+        let env = ProcessInfo.processInfo.environment
+        guard env["LUMA_LIVE_PHOTO_CI"] == "1" else { return }
+        let message = "[LivePhoto] \(stage)\n"
+        FileHandle.standardError.write(Data(message.utf8))
+        guard let path = env["LUMA_LIVE_TRACE_FILE"], !path.isEmpty else { return }
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: path) {
+            _ = fm.createFile(atPath: path, contents: Data())
+        }
+        do {
+            let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data(message.utf8))
+            try handle.close()
+        } catch {
+            FileHandle.standardError.write(
+                Data("[LivePhoto] trace write failed: \(error)\n".utf8)
+            )
+        }
     }
 
     public static func export(
@@ -86,6 +104,7 @@ public enum AppleLivePhotoExporter {
             still: photo, movie: movie, expectedIdentifier: identifier.uuidString,
             expectedStillTime: created
         )
+        diagnostics("stored-pair verification succeeded")
         try Task.checkCancellation()
         guard !fm.fileExists(atPath: stillDestination.path),
               !fm.fileExists(atPath: movieDestination.path) else {
@@ -98,6 +117,7 @@ public enum AppleLivePhotoExporter {
             try? fm.removeItem(at: movieDestination)
             throw error
         }
+        diagnostics("final paired resources published")
         return LivePhotoPair(
             still: stillDestination, movie: movieDestination,
             identifier: identifier.uuidString, stillTime: created
@@ -361,6 +381,7 @@ public enum LivePhotoPairVerifier {
             throw LumaError.validationFailed("Live Photo JPEG asset identifier mismatch.")
         }
         let asset = AVURLAsset(url: movie)
+        AppleLivePhotoExporter.diagnostics("verifier: loading MOV metadata")
         let movieMetadata = try await asset.load(.metadata)
         var matchedContentID = false
         for item in movieMetadata where item.identifier == .quickTimeMetadataContentIdentifier {
@@ -368,6 +389,7 @@ public enum LivePhotoPairVerifier {
                 matchedContentID = true
             }
         }
+        AppleLivePhotoExporter.diagnostics("verifier: content identifier resolved")
         guard matchedContentID else {
             throw LumaError.validationFailed("Live Photo MOV content identifier is missing or mismatched.")
         }
@@ -379,6 +401,7 @@ public enum LivePhotoPairVerifier {
         guard !tracks.isEmpty else {
             throw LumaError.validationFailed("Live Photo MOV has no timed still-image metadata track.")
         }
+        AppleLivePhotoExporter.diagnostics("verifier: reading timed metadata track")
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: tracks[0], outputSettings: nil)
         guard reader.canAdd(output) else {
@@ -409,6 +432,7 @@ public enum LivePhotoPairVerifier {
                 }
             }
         }
+        AppleLivePhotoExporter.diagnostics("verifier: observed \(observed), matching=\(matchingTime)")
         guard matchingTime else {
             throw LumaError.validationFailed(
                 "Live Photo timed metadata was not aligned: expected \(expectedStillTime)s, "
