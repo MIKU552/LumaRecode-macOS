@@ -63,3 +63,9 @@ Actions #9 中 Xcode / Swift 严格并发编译、单元测试、SDR 软件 HEVC
 ## Homebrew ffmpeg-full 依赖和输出验收
 
 Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus 重新编码、非法色度升采样拒绝、真实 PTS 时间轴读取均已通过对应步骤。Full→Limited 范围转换因普通 Homebrew FFmpeg 缺少 zscale 被能力预检拒绝。CI 已改为安装 keg-only 的 `ffmpeg-full` 并将其置于 PATH 前列，明确验证 zscale 存在；Mac App 也优先发现它。完整 CI 结果需以后续运行为准。
+
+## 本轮外部工具和逐帧裁剪
+
+用户明确选择自行安装 FFmpeg。SwiftUI Settings 使用系统文件选择器配置 FFmpeg/ffprobe，并显示当前编码器与 zscale 检测结果；工具不会被内嵌或下载。根目录现有独立 MIT LICENSE。
+
+`FrameTrimPlanner` 已按 Windows `FrameTimeline`、`Transcoder.Frames`、`NativeCli.Frames` 的行为约束实现准确显示帧范围（内核 0-based/end-exclusive，原生 UI 1-based/inclusive）；视频帧 `trim` + `setpts`，音频 `atrim` + `asetpts`，源音频不能未经裁剪复制。默认重编码 AAC。FFprobe 重新解码并核对输出总帧数后才发布文件；负 PTS 源暂时拒绝，仍需覆盖更多 VFR/音轨偏移案例。macOS CI 新增 H.264 B 帧样片端到端裁剪测试，执行结果以后续 Actions 为准。

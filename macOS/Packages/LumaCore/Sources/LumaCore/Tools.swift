@@ -19,8 +19,19 @@ public struct MediaTools: Sendable {
         guard let encoder = locate("ffmpeg", configured: ffmpeg) else {
             throw LumaError.toolsMissing("FFmpeg was not found. Install a suitable macOS build and set the path in Settings.")
         }
-        guard let probe = locate("ffprobe", configured: ffprobe) else {
-            throw LumaError.toolsMissing("ffprobe was not found. Set its path in Settings.")
+        // Prefer the ffprobe shipped alongside the selected FFmpeg so that
+        // a custom binary and Homebrew's keg-only full version stay in sync.
+        let sibling = encoder.deletingLastPathComponent().appendingPathComponent("ffprobe")
+        let probe: URL?
+        if let ffprobe, !ffprobe.isEmpty {
+            probe = locate("ffprobe", configured: ffprobe)
+        } else if FileManager.default.isExecutableFile(atPath: sibling.path) {
+            probe = sibling
+        } else {
+            probe = locate("ffprobe")
+        }
+        guard let probe else {
+            throw LumaError.toolsMissing("ffprobe was not found. Select the matching binary in Settings.")
         }
         return try MediaTools(ffmpeg: encoder, ffprobe: probe)
     }
