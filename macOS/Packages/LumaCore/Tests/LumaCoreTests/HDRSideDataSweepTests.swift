@@ -3,15 +3,50 @@ import XCTest
 @testable import LumaCore
 
 final class HDRSideDataSweepTests: XCTestCase {
+    private var masteringRecord: String {
+        "frame|side_datum/mastering_display_metadata:side_data_type=Mastering display metadata"
+        + "|side_datum/mastering_display_metadata:green_x=13250/50000"
+        + "|side_datum/mastering_display_metadata:green_y=34500/50000"
+        + "|side_datum/mastering_display_metadata:blue_x=7500/50000"
+        + "|side_datum/mastering_display_metadata:blue_y=3000/50000"
+        + "|side_datum/mastering_display_metadata:red_x=34000/50000"
+        + "|side_datum/mastering_display_metadata:red_y=16000/50000"
+        + "|side_datum/mastering_display_metadata:white_point_x=15635/50000"
+        + "|side_datum/mastering_display_metadata:white_point_y=16450/50000"
+        + "|side_datum/mastering_display_metadata:max_luminance=10000000/10000"
+        + "|side_datum/mastering_display_metadata:min_luminance=50/10000"
+    }
+
+    private var lightRecord: String {
+        "frame|side_datum/content_light_level_metadata:side_data_type=Content light level metadata"
+        + "|side_datum/content_light_level_metadata:max_content=1000"
+        + "|side_datum/content_light_level_metadata:max_average=400"
+    }
+
     private func source(staticHDR: Bool = false) -> MediaInfo {
-        MediaInfo(
+        let expected: [[String: Any]] = [
+            [
+                "side_data_type": "Mastering display metadata",
+                "green_x": "13250/50000", "green_y": "34500/50000",
+                "blue_x": "7500/50000", "blue_y": "3000/50000",
+                "red_x": "34000/50000", "red_y": "16000/50000",
+                "white_point_x": "15635/50000", "white_point_y": "16450/50000",
+                "max_luminance": "10000000/10000", "min_luminance": "50/10000"
+            ],
+            [
+                "side_data_type": "Content light level metadata",
+                "max_content": "1000", "max_average": "400"
+            ]
+        ]
+        return MediaInfo(
             url: URL(fileURLWithPath: "/tmp/sweep-source.mkv"), codec: "hevc",
             width: 160, height: 96, duration: 3, frameRate: 12,
             pixelFormat: "yuv420p10le", bitDepth: 10,
             primaries: "bt2020", transfer: "smpte2084",
             matrix: "bt2020nc", colorRange: "tv",
             audioCodecs: [], sourceColor: .pq, dynamicHDR: false,
-            staticHDRMetadataPresent: staticHDR
+            staticHDRMetadataPresent: staticHDR,
+            hdrStaticMetadata: staticHDR ? HDRStaticMetadata.parse(expected) : nil
         )
     }
 
@@ -72,14 +107,40 @@ final class HDRSideDataSweepTests: XCTestCase {
 
     func testValidRepeatedStaticHDRIsAllowed() async throws {
         let (tools, file) = try fixtureTool([
-            "frame|side_datum/mastering_display_metadata:side_data_type=Mastering display metadata",
-            "frame|side_datum/content_light_level_metadata:side_data_type=Content light level metadata",
-            "frame"
+            masteringRecord, lightRecord, "frame"
         ])
         defer { try? FileManager.default.removeItem(at: file) }
         try await HDRSideDataSweep.verifyBeforeEncoding(
             tools: tools, source: source(staticHDR: true)
         )
+    }
+
+    func testDetectsChangedMasteringAfterInitialFrames() async throws {
+        let altered = masteringRecord.replacingOccurrences(
+            of: "red_x=34000/50000", with: "red_x=33500/50000"
+        )
+        let (tools, file) = try fixtureTool([
+            masteringRecord, lightRecord, "frame", "frame", altered
+        ])
+        defer { try? FileManager.default.removeItem(at: file) }
+        do {
+            try await HDRSideDataSweep.verifyBeforeEncoding(
+                tools: tools, source: source(staticHDR: true)
+            )
+            XCTFail("Changed mastering display must be rejected before publishing.")
+        } catch LumaError.unsupported(let message) {
+            XCTAssertTrue(message.contains("change"), message)
+        }
+    }
+
+    func testUnparseableOrIncompleteStaticSEIFailsClosed() throws {
+        let missing = "frame|side_datum/mastering_display_metadata:side_data_type=Mastering display metadata"
+        XCTAssertNil(HDRSideDataSweep.staticMetadata(in: missing))
+        XCTAssertThrowsError(try HDRSideDataSweep.verifyRecord(
+            missing, source: source(staticHDR: true)
+        ))
+        let expected = try XCTUnwrap(HDRSideDataSweep.staticMetadata(in: masteringRecord))
+        XCTAssertEqual(expected.masteringDisplay?["red_x"], 0.68)
     }
 
     func testDolbyVisionEvidenceRejected() {
