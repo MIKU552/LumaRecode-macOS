@@ -35,6 +35,17 @@ struct PreferencesView: View {
                          destination: URL(string: "https://formulae.brew.sh/formula/ffmpeg-full")!)
                         .font(.caption)
                 }
+                Section("第三方相机 LUT 授权") {
+                    if let attribution = try? CameraLogPipeline.openOSVAttributions() {
+                        Link("OpenOSV · Apache-2.0 LICENSE", destination: attribution.license)
+                        Link("OpenOSV · 原始 NOTICE", destination: attribution.notice)
+                    } else {
+                        Label("第三方 LUT 声明缺失", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                    Text("DJI Pocket 3 LUT 保留 OpenOSV 原始许可；其余四份相机 LUT 使用项目 MIT 许可。FFmpeg 由用户单独安装。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Section("依赖诊断") {
                     HStack {
                         Button {

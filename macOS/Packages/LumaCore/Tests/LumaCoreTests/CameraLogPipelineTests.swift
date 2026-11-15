@@ -57,6 +57,16 @@ final class CameraLogPipelineTests: XCTestCase {
         }
     }
 
+    func testApacheLicenseAndNoticeShipWithPocket3LUT() throws {
+        let originals = try CameraLogPipeline.openOSVAttributions()
+        let licenseText = try String(contentsOf: originals.license, encoding: .utf8)
+        let noticeText = try String(contentsOf: originals.notice, encoding: .utf8)
+        XCTAssertTrue(licenseText.contains("Apache License"))
+        XCTAssertTrue(licenseText.contains("Version 2.0"))
+        XCTAssertTrue(noticeText.contains("OpenOSV"))
+        XCTAssertTrue(noticeText.contains("Copyright 2026"))
+    }
+
     func testOriginalCameraYCbCrDefaultsAreNotGuessedFromGamut() {
         XCTAssertEqual(CameraLogProfile.pocket3.fallbackMatrix, "709")
         XCTAssertEqual(CameraLogProfile.applelog.fallbackMatrix, "2020_ncl")

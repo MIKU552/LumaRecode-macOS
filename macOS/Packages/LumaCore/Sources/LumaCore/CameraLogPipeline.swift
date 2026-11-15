@@ -51,6 +51,21 @@ public enum CameraLogPipeline {
         return url
     }
 
+    /// The original unmodified Pocket 3 LUT is Apache-2.0, unlike the
+    /// four project-generated MIT LUTs. Preserve the upstream text in the
+    /// distributed LumaCore resource bundle, not only in the source repo.
+    public static func openOSVAttributions() throws -> (license: URL, notice: URL) {
+        guard let license = Bundle.module.url(forResource: "OpenOSV-LICENSE", withExtension: "txt"),
+              let notice = Bundle.module.url(forResource: "OpenOSV-NOTICE", withExtension: "txt"),
+              FileManager.default.isReadableFile(atPath: license.path),
+              FileManager.default.isReadableFile(atPath: notice.path) else {
+            throw LumaError.validationFailed(
+                "OpenOSV Apache-2.0 license or attribution notice is missing from the app bundle."
+            )
+        }
+        return (license, notice)
+    }
+
     public static func decodingMatrix(
         media: MediaInfo, profile: CameraLogProfile
     ) -> String {
