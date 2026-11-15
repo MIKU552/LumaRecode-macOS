@@ -281,11 +281,13 @@ public enum LivePhotoPairVerifier {
         }
         let asset = AVURLAsset(url: movie)
         let movieMetadata = try await asset.load(.metadata)
-        let contentIDs = movieMetadata.compactMap { item -> String? in
-            guard item.identifier == .quickTimeMetadataContentIdentifier else { return nil }
-            return item.stringValue
+        var matchedContentID = false
+        for item in movieMetadata where item.identifier == .quickTimeMetadataContentIdentifier {
+            if try await item.load(.stringValue) == expectedIdentifier {
+                matchedContentID = true
+            }
         }
-        guard contentIDs.contains(expectedIdentifier) else {
+        guard matchedContentID else {
             throw LumaError.validationFailed("Live Photo MOV content identifier is missing or mismatched.")
         }
         let video = try await asset.loadTracks(withMediaType: .video)
