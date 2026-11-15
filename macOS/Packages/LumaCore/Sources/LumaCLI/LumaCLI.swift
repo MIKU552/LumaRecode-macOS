@@ -14,6 +14,22 @@ struct LumaCLI {
         return args[index + 1]
     }
 
+    private static func optionalInt(_ key: String, args: [String]) throws -> Int? {
+        guard let raw = value(key, args: args) else { return nil }
+        guard let number = Int(raw), number >= 0 else {
+            throw LumaError.invalidInput("\(key) must be a non-negative integer.")
+        }
+        return number
+    }
+
+    private static func optionalTime(_ key: String, args: [String]) throws -> Double? {
+        guard let raw = value(key, args: args) else { return nil }
+        guard let number = Double(raw), number.isFinite && number >= 0 else {
+            throw LumaError.invalidInput("\(key) must be a finite non-negative time.")
+        }
+        return number
+    }
+
     private static func emit(_ name: String, _ data: [String: Any] = [:]) {
         let event: [String: Any] = ["schema_version": 1, "event": name, "data": data]
         if let json = try? JSONSerialization.data(withJSONObject: event, options: [.sortedKeys]),
@@ -32,6 +48,12 @@ struct LumaCLI {
           lumarecode frames INPUT    # exact original PTS frame count / time base
           lumarecode plan INPUT [--codec hevc|avc|av1] [--purpose archive|share] [--output PATH]
           lumarecode convert INPUT [--codec ...] [--purpose ...] [--output PATH] [--overwrite] [--json]
+          lumarecode convert INPUT --start-frame 10 --end-frame 40 [--codec hevc]
+          lumarecode convert INPUT --start-time 0.5 --end-time 2.0 [--codec hevc]
+
+        Frame trim uses zero-based display frames and an end-exclusive boundary.
+        --start-frame / --end-frame and --start-time / --end-time are mutually exclusive.
+        Audio tracks are re-encoded (AAC by default), never stream-copied during trimming.
 
         Format policy (from Windows OutputPolicy):
           --sampling auto|source|420|422|444|gray
@@ -41,7 +63,7 @@ struct LumaCLI {
           --fast  (software archive AV1 only)
 
         Unported features (HDR10+ and Dolby Vision preservation, Log/RAW development,
-        frame-accurate trimming, Live Photos) are blocked rather than approximated.
+        Live Photos) are blocked rather than approximated.
         """)
     }
 
@@ -116,9 +138,33 @@ struct LumaCLI {
                     for: media, selection: selection, directory: input.deletingLastPathComponent()
                 )
             }
-            let plan = try EncodingPlanner.plan(
-                tools: tools, media: media, selection: selection, destination: destination
-            )
+            let startFrame = try optionalInt("--start-frame", args: words)
+            let endFrame = try optionalInt("--end-frame", args: words)
+            let startTime = try optionalTime("--start-time", args: words)
+            let endTime = try optionalTime("--end-time", args: words)
+            let wantsTrim = startFrame != nil || endFrame != nil
+                || startTime != nil || endTime != nil
+            let trimmed: TrimmedEncodingPlan?
+            let plan: EncodingPlan
+            if wantsTrim {
+                let timeline = try await FrameTimelineLoader.load(tools: tools, media: media)
+                let range = try FrameTrimPlanner.resolve(
+                    in: timeline, startFrame: startFrame, endFrame: endFrame,
+                    startTime: startTime, endTime: endTime
+                )
+                let built = try FrameTrimPlanner.plan(
+                    tools: tools, media: media, selection: selection,
+                    destination: destination, timeline: timeline, range: range
+                )
+                trimmed = built
+                plan = built.encoding
+            } else {
+                trimmed = nil
+                plan = try EncodingPlanner.plan(
+                    tools: tools, media: media, selection: selection,
+                    destination: destination
+                )
+            }
             if command == "plan" {
                 emit("plan", ["argv": [plan.executable.path] + plan.arguments,
                               "output": destination.path,
@@ -128,14 +174,24 @@ struct LumaCLI {
                               "bit_depth": selection.bitDepth.rawValue,
                               "color_range": selection.colorRange.rawValue,
                               "audio": selection.audio.rawValue,
-                              "variant": selection.variant.rawValue])
+                              "variant": selection.variant.rawValue,
+                              "effective_audio": plan.selection.audio.rawValue,
+                              "trim_start_frame": trimmed?.window.start as Any? ?? NSNull(),
+                              "trim_end_frame": trimmed?.window.end as Any? ?? NSNull(),
+                              "expected_frames": trimmed?.window.count as Any? ?? NSNull()
+                ])
                 return
             }
             let session = ConversionSession()
-            emit("start", ["input": input.path, "output": destination.path])
+            emit("start", [
+                "input": input.path, "output": destination.path,
+                "expected_frames": trimmed?.window.count as Any? ?? NSNull()
+            ])
             let result = try await session.execute(
                 plan: plan, tools: tools, source: media,
                 overwrite: words.contains("--overwrite"),
+                expectedFrames: trimmed?.window.count,
+                progressDuration: trimmed?.window.duration,
                 onProgress: { p in
                     emit("progress", ["percent": p.fraction * 100,
                                       "position_seconds": p.seconds,
@@ -143,7 +199,10 @@ struct LumaCLI {
                                       "fps": p.fps as Any? ?? NSNull()])
                 }
             )
-            emit("done", ["output": result.path])
+            emit("done", [
+                "output": result.path,
+                "frames": trimmed?.window.count as Any? ?? NSNull()
+            ])
         } catch {
             emit("error", ["message": error.localizedDescription])
             exit(1)
