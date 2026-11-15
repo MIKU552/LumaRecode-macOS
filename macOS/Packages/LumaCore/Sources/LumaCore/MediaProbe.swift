@@ -1,58 +1,99 @@
 import Foundation
 
+/// Native Swift ffprobe adapter. Selection, first-frame tag fallback and
+/// attached-picture handling are based on Windows Core/MediaProbe.cs.
 public enum MediaProbe {
     private static func string(_ object: [String: Any], _ name: String) -> String {
         if let value = object[name] as? String { return value }
         if let value = object[name] as? NSNumber { return value.stringValue }
         return ""
     }
+
     private static func int(_ object: [String: Any], _ name: String) -> Int {
         Int(string(object, name)) ?? 0
     }
+
     private static func number(_ value: String) -> Double {
         let pieces = value.split(separator: "/")
-        if pieces.count == 2, let numerator = Double(pieces[0]), let denominator = Double(pieces[1]),
-           denominator != 0 { return numerator / denominator }
+        if pieces.count == 2, let n = Double(pieces[0]), let d = Double(pieces[1]), d != 0 {
+            return n / d
+        }
         return Double(value) ?? 0
     }
+
+    private static func isUnspecified(_ value: String) -> Bool {
+        value.isEmpty || value == "unknown" || value == "unspecified" || value == "N/A"
+    }
+
+    private static func mediaStream(_ streams: [[String: Any]]) -> (offset: Int, video: [String: Any])? {
+        let candidates = streams.enumerated().filter { _, stream in
+            guard string(stream, "codec_type") == "video" else { return false }
+            let disposition = stream["disposition"] as? [String: Any] ?? [:]
+            return int(disposition, "attached_pic") == 0
+        }
+        // ProRes RAW is an explicitly preferred video track in the Windows probe.
+        if let raw = candidates.first(where: { string($0.element, "codec_name") == "prores_raw" }) {
+            return (raw.offset, raw.element)
+        }
+        guard let selected = candidates.first else { return nil }
+        return (selected.offset, selected.element)
+    }
+
     public static func parse(_ data: Data, url: URL) throws -> MediaInfo {
         guard let doc = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let streams = doc["streams"] as? [[String: Any]],
-              let video = streams.first(where: { string($0, "codec_type") == "video" }) else {
-            throw LumaError.invalidInput("No video stream was found.")
+              let (_, video) = mediaStream(streams) else {
+            throw LumaError.invalidInput("No playable video stream was found.")
         }
         let audio = streams.filter { string($0, "codec_type") == "audio" }
             .map { string($0, "codec_name") }
-        let format = (doc["format"] as? [String: Any]) ?? [:]
-        let transfer = string(video, "color_transfer")
-        let primaries = string(video, "color_primaries")
+        let format = doc["format"] as? [String: Any] ?? [:]
+        let firstFrames = doc["frames"] as? [[String: Any]] ?? []
+        func field(_ name: String) -> String {
+            let fromStream = string(video, name)
+            guard isUnspecified(fromStream) else { return fromStream }
+            return firstFrames.map { string($0, name) }.first(where: { !isUnspecified($0) }) ?? fromStream
+        }
+
+        let transfer = field("color_transfer")
+        let primaries = field("color_primaries")
+        let matrix = field("color_space")
+        let range = field("color_range")
         let pixel = string(video, "pix_fmt")
         let codec = string(video, "codec_name")
         let profile = string(video, "profile").lowercased()
-        let tags = (video["tags"] as? [String: Any]) ?? [:]
+        let streamTags = video["tags"] as? [String: Any] ?? [:]
+        let formatTags = format["tags"] as? [String: Any] ?? [:]
+        let tags = formatTags.merging(streamTags) { _, stream in stream }
         let raw = codec == "prores_raw" || (codec == "prores" && profile.contains("raw"))
-        let descriptionText = [string(tags, "com.apple.quicktime.camera.identifier"),
-                               string(tags, "com.apple.quicktime.video-log-color-space"),
-                               string(tags, "LogProfile")].joined(separator: " ").lowercased()
-        let isLog = descriptionText.contains("log") && !descriptionText.contains("catalog")
+        let description = [
+            string(tags, "com.apple.quicktime.camera.identifier"),
+            string(tags, "com.apple.quicktime.video-log-color-space"),
+            string(tags, "LogProfile")
+        ].joined(separator: " ").lowercased()
+        let isLog = description.contains("log") && !description.contains("catalog")
+
         let color: SourceColor
         if raw { color = .raw }
         else if isLog { color = .log }
         else if transfer == "arib-std-b67" { color = .hlg }
         else if transfer == "smpte2084" { color = .pq }
-        else if ["bt709", "iec61966-2-1", "smpte170m", "bt470bg"].contains(transfer) { color = .sdr }
-        else { color = .unknown }
+        else if ["bt709", "iec61966-2-1", "smpte170m", "bt470bg"].contains(transfer) {
+            color = .sdr
+        } else {
+            color = .unknown
+        }
 
-        let sideData = (video["side_data_list"] as? [[String: Any]]) ?? []
-        let frameSideData = ((doc["frames"] as? [[String: Any]]) ?? [])
-            .flatMap { ($0["side_data_list"] as? [[String: Any]]) ?? [] }
-        let evidence = (sideData + frameSideData)
+        let streamSideData = video["side_data_list"] as? [[String: Any]] ?? []
+        let frameSideData = firstFrames.flatMap { $0["side_data_list"] as? [[String: Any]] ?? [] }
+        let evidence = (streamSideData + frameSideData)
             .map { string($0, "side_data_type") }.joined(separator: " ")
         let codecTag = string(video, "codec_tag_string").lowercased()
         let dynamicHDR = evidence.localizedCaseInsensitiveContains("DOVI")
             || evidence.localizedCaseInsensitiveContains("Dolby Vision")
             || evidence.localizedCaseInsensitiveContains("HDR10+")
             || codecTag == "dvh1" || codecTag == "dvhe"
+
         let depthFromPix = ["12", "10", "16"].first(where: { pixel.contains($0) }).flatMap(Int.init)
         let depth = int(video, "bits_per_raw_sample")
         let duration = number(string(video, "duration")) > 0
@@ -61,42 +102,39 @@ public enum MediaProbe {
             url: url, codec: codec, width: int(video, "width"), height: int(video, "height"),
             duration: duration, frameRate: number(string(video, "avg_frame_rate")),
             pixelFormat: pixel, bitDepth: depth > 0 ? depth : depthFromPix ?? 8,
-            primaries: primaries, transfer: transfer, matrix: string(video, "color_space"),
-            colorRange: string(video, "color_range"), audioCodecs: audio,
+            primaries: primaries, transfer: transfer, matrix: matrix,
+            colorRange: range, audioCodecs: audio,
             sourceColor: color, dynamicHDR: dynamicHDR,
             dynamicHDRDescription: dynamicHDR ? evidence : nil
         )
     }
+
     public static func inspect(tools: MediaTools, url: URL) async throws -> MediaInfo {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw LumaError.invalidInput("Source file does not exist.")
         }
-        let output = try await CommandCapture.run(tools.ffprobe, [
+        let probe = try await CommandCapture.run(tools.ffprobe, [
             "-v", "error", "-show_streams", "-show_format", "-of", "json", url.path
         ], timeout: 35)
-        var info = try parse(output.stdout, url: url)
-        // ffprobe often emits HDR10+ metadata on decoded frames rather than
-        // stream headers. Inspect a bounded number of initial frames to avoid
-        // accidentally dropping visible dynamic metadata in the basic path.
-        // This is an early warning, NOT proof of absence later in the clip.
-        if info.sourceColor.isHDR && !info.dynamicHDR {
+        guard var document = try JSONSerialization.jsonObject(with: probe.stdout) as? [String: Any],
+              let streams = document["streams"] as? [[String: Any]],
+              let (offset, video) = mediaStream(streams) else {
+            throw LumaError.invalidInput("No playable video stream was found.")
+        }
+        // Source MediaProbe.cs reads first decoded frames both for missing color
+        // tags and for dynamic HDR side data. This is bounded, not exhaustive.
+        if string(video, "codec_name") != "prores_raw" {
+            let index = int(video, "index")
+            let selection = index > 0 ? "\(index)" : "\(offset)"
             if let frames = try? await CommandCapture.run(tools.ffprobe, [
-                "-v", "error", "-select_streams", "v:0",
+                "-v", "error", "-select_streams", selection,
                 "-read_intervals", "%+#3", "-show_frames", "-of", "json", url.path
             ], timeout: 35, limit: 2 * 1024 * 1024),
-               let document = try? JSONSerialization.jsonObject(with: frames.stdout) as? [String: Any],
-               let items = document["frames"] as? [[String: Any]] {
-                let evidence = items.flatMap {
-                    ($0["side_data_list"] as? [[String: Any]]) ?? []
-                }.map { string($0, "side_data_type") }.joined(separator: " ")
-                if evidence.localizedCaseInsensitiveContains("DOVI")
-                    || evidence.localizedCaseInsensitiveContains("Dolby Vision")
-                    || evidence.localizedCaseInsensitiveContains("HDR10+") {
-                    info.dynamicHDR = true
-                    info.dynamicHDRDescription = evidence
-                }
+            let parsed = try? JSONSerialization.jsonObject(with: frames.stdout) as? [String: Any],
+            let framesArray = parsed["frames"] as? [[String: Any]] {
+                document["frames"] = framesArray
             }
         }
-        return info
+        return try parse(JSONSerialization.data(withJSONObject: document), url: url)
     }
 }
