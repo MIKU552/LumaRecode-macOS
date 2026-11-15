@@ -4,7 +4,7 @@ import LumaPhotos
 import SwiftUI
 
 struct PhotoWorkspace: View {
-    @EnvironmentObject private var model: WorkspaceModel
+    @Environment(WorkspaceModel.self) private var model
     @State private var seconds = 0.0
     @State private var format: StillFormat = .heic
     @State private var quality = 0.95

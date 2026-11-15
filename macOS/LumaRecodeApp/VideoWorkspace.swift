@@ -5,7 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct VideoWorkspace: View {
-    @EnvironmentObject private var model: WorkspaceModel
+    @Environment(WorkspaceModel.self) private var model
     @State private var player = AVPlayer()
 
     var body: some View {

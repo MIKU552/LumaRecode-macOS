@@ -4,9 +4,10 @@ import SwiftUI
 /// Native macOS inspector: choices follow source capabilities; original preset
 /// data is read by the Swift core, not hard-coded as WinUI screen values.
 struct EncodingInspector: View {
-    @EnvironmentObject private var model: WorkspaceModel
+    @Environment(WorkspaceModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         Form {
             Section("工作模式") {
                 Picker("处理方式", selection: $model.selection.purpose) {
@@ -54,7 +55,7 @@ struct EncodingInspector: View {
                     Text("保持原片").tag(SamplingChoice.source)
                     ForEach([SamplingChoice.yuv420, .yuv422, .yuv444, .gray]) { format in
                         if isSamplingSupported(format) {
-                            Text(format == .gray ? "灰度" : "4:\(String(format.rawValue.dropFirst()))")
+                            Text(samplingLabel(format))
                                 .tag(format)
                         }
                     }
@@ -101,6 +102,16 @@ struct EncodingInspector: View {
         }
         .formStyle(.grouped)
         .disabled(model.converting)
+    }
+
+    private func samplingLabel(_ choice: SamplingChoice) -> String {
+        switch choice {
+        case .yuv420: return "4:2:0"
+        case .yuv422: return "4:2:2"
+        case .yuv444: return "4:4:4"
+        case .gray: return "灰度"
+        default: return "自动"
+        }
     }
 
     private var presetLabel: String {

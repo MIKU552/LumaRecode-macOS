@@ -1,5 +1,5 @@
 import AppKit
-import Combine
+import Observation
 import Foundation
 import LumaCore
 
@@ -33,22 +33,23 @@ struct JobRecord: Identifiable {
 }
 
 @MainActor
-final class WorkspaceModel: ObservableObject {
-    @Published var area: WorkspaceArea = .video
-    @Published var sourceURL: URL?
-    @Published var media: MediaInfo?
-    @Published var selection = EncodeSelection(purpose: .archive, codec: .hevc)
-    @Published var loading = false
-    @Published var converting = false
-    @Published var progress: TranscodeProgress?
-    @Published var errorMessage = ""
-    @Published var showError = false
-    @Published var status = "选择视频或将文件拖入窗口"
-    @Published var jobs: [JobRecord] = []
+@Observable
+final class WorkspaceModel {
+    var area: WorkspaceArea = .video
+    var sourceURL: URL?
+    var media: MediaInfo?
+    var selection = EncodeSelection(purpose: .archive, codec: .hevc)
+    var loading = false
+    var converting = false
+    var progress: TranscodeProgress?
+    var errorMessage = ""
+    var showError = false
+    var status = "选择视频或将文件拖入窗口"
+    var jobs: [JobRecord] = []
 
-    private var currentSession: ConversionSession?
-    private var securityURL: URL?
-    private var loadGeneration = 0
+    @ObservationIgnored private var currentSession: ConversionSession?
+    @ObservationIgnored private var securityURL: URL?
+    @ObservationIgnored private var loadGeneration = 0
 
     func open(_ url: URL) {
         loadGeneration += 1
