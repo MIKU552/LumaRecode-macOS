@@ -43,3 +43,7 @@
 ## Xcode 27.2 / ffprobe 增强
 
 CI 现在优先选择已安装的 **Xcode 27.2**（Swift 6.4.2），在镜像未安装时回退到 Xcode 27 默认版本。增加 ProRes RAW `prores_raw` 检测和有限首帧 HDR10+ / Dolby Vision 元数据辅助检测；**有限首帧检测不保证全视频动态元数据安全**，后续仍需位流级完整校验。
+
+### HDR HEIC 视频实测
+
+新增可选的 `AppleHDRPhotoTests.testExportsPQFrameFromNative10BitVideo` 测试，由 CI 的 `media-smoke` 任务生成带 BT.2020 PQ 标签的 10-bit HEVC 样片，通过 AVAssetReader → Core Image → HEIF10 导出，并检查图片尺寸与 ImageIO 可读性。该测试**不等于真实 EDR 屏幕、HDR 亮度或 Apple Photos 的完整色彩验收**。
