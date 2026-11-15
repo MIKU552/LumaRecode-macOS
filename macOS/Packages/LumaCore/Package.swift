@@ -10,7 +10,7 @@ let package = Package(
         .executable(name: "lumarecode", targets: ["LumaCLI"])
     ],
     targets: [
-        .target(name: "LumaCore", path: "Sources/LumaCore"),
+        .target(name: "LumaCore", path: "Sources/LumaCore", resources: [.process("Resources")]),
         .target(name: "LumaPhotos", dependencies: ["LumaCore"], path: "Sources/LumaPhotos"),
         .executableTarget(name: "LumaCLI", dependencies: ["LumaCore"]),
         .testTarget(name: "LumaCoreTests", dependencies: ["LumaCore"]),
