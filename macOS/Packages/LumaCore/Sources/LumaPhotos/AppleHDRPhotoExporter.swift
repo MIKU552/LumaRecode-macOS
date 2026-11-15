@@ -12,7 +12,10 @@ public enum AppleHDRPhotoExporter {
     /// Writes a PQ-tagged, 10-bit HEIC from an already color-managed CIImage.
     /// The supplied image must describe the correct input color space.
     public static func writePQ(_ image: CIImage, to destination: URL) throws {
-        guard image.extent.isFinite, !image.extent.isEmpty else {
+        let bounds = image.extent
+        guard !bounds.isEmpty,
+              bounds.origin.x.isFinite, bounds.origin.y.isFinite,
+              bounds.width.isFinite, bounds.height.isFinite else {
             throw LumaError.invalidInput("HDR photo has no finite image extent.")
         }
         guard let outputColor = CGColorSpace(name: CGColorSpace.itur_2100_PQ),

@@ -12,13 +12,9 @@ final class AppleHDRPhotoTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: path) }
         let image = CIImage(color: CIColor(red: 0.25, green: 0.5, blue: 0.1))
             .cropped(to: CGRect(x: 0, y: 0, width: 96, height: 64))
-        do {
-            try AppleHDRPhotoExporter.writePQ(image, to: path)
-        } catch {
-            // A hosted runner may not expose a HEIF10 encoder; this is not a
-            // positive compatibility assertion for target Apple Silicon Macs.
-            throw XCTSkip("System HEIF10 encoding is unavailable in the runner: \(error)")
-        }
+        // This is a required test, not a skipped compatibility claim.
+        // A HEIF10 encoder failure must fail CI.
+        try AppleHDRPhotoExporter.writePQ(image, to: path)
         let imageSource = try XCTUnwrap(CGImageSourceCreateWithURL(path as CFURL, nil))
         XCTAssertEqual(CGImageSourceGetCount(imageSource), 1)
         let props = try XCTUnwrap(
