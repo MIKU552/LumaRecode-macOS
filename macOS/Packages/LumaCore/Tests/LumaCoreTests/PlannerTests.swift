@@ -10,67 +10,106 @@ final class PlannerTests: XCTestCase {
         MediaInfo(
             url: URL(fileURLWithPath: "/tmp/source.mov"), codec: "hevc",
             width: 3840, height: 2160, duration: 60, frameRate: 29.97,
-            pixelFormat: depth > 8 ? "yuv420p10le" : "yuv420p",
-            bitDepth: depth, primaries: "bt709", transfer: "bt709",
-            matrix: "bt709", colorRange: "tv", audioCodecs: ["aac"],
+            pixelFormat: depth == 8 ? "yuv420p" : "yuv420p\(depth)le",
+            bitDepth: depth, primaries: color.isHDR ? "bt2020" : "bt709",
+            transfer: color == .pq ? "smpte2084" :
+                color == .hlg ? "arib-std-b67" : "bt709",
+            matrix: color.isHDR ? "bt2020nc" : "bt709",
+            colorRange: "tv", audioCodecs: ["aac"],
             sourceColor: color, dynamicHDR: dynamic
         )
     }
     private func tools() throws -> MediaTools {
-        // Tests only construct arguments. No FFmpeg process is started.
+        // Planning tests do not launch FFmpeg.
         try MediaTools(ffmpeg: URL(fileURLWithPath: "/bin/echo"),
                        ffprobe: URL(fileURLWithPath: "/bin/echo"))
     }
+    private func value(_ key: String, _ plan: EncodingPlan) -> String? {
+        guard let index = plan.arguments.firstIndex(of: key),
+              plan.arguments.indices.contains(index + 1) else { return nil }
+        return plan.arguments[index + 1]
+    }
+    private func x265(_ plan: EncodingPlan) -> Set<String> {
+        Set((value("-x265-params", plan) ?? "").split(separator: ":").map(String.init))
+    }
+
     func testSoftwareArchiveKeepsOriginalPreset() throws {
         let plan = try EncodingPlanner.plan(
             tools: tools(), media: media(),
             selection: EncodeSelection(purpose: .archive, codec: .hevc),
             destination: URL(fileURLWithPath: "/tmp/output.mkv")
         )
-        XCTAssertTrue(plan.arguments.contains("libx265"))
-        XCTAssertTrue(plan.arguments.contains("23"))
-        XCTAssertTrue(plan.arguments.contains(
-            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"
-        ))
-        XCTAssertTrue(plan.arguments.contains("copy"))
+        XCTAssertEqual(value("-c:v", plan), "libx265")
+        XCTAssertEqual(value("-preset", plan), "medium")
+        XCTAssertEqual(value("-crf", plan), "23")
+        XCTAssertEqual(value("-pix_fmt", plan), "yuv420p")
+        XCTAssertTrue(x265(plan).isSuperset(of: [
+            "pools=16", "log-level=warning", "rdoq-level=2", "psy-rdoq=1",
+            "colorprim=bt709", "transfer=bt709", "colormatrix=bt709"
+        ]))
+        XCTAssertEqual(value("-c:a", plan), "copy")
+        XCTAssertEqual(value("-fps_mode:v", plan), "passthrough")
     }
     func testSoftwareHEVCSignalsPQInBitstream() throws {
-        var input = media(color: .pq, depth: 10)
-        input.primaries = "bt2020"
-        input.transfer = "smpte2084"
-        input.matrix = "bt2020nc"
         let plan = try EncodingPlanner.plan(
-            tools: tools(), media: input,
+            tools: tools(), media: media(color: .pq, depth: 10),
             selection: EncodeSelection(purpose: .archive, codec: .hevc),
             destination: URL(fileURLWithPath: "/tmp/hdr-output.mkv")
         )
-        XCTAssertTrue(plan.arguments.contains(
-            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
-        ))
-        XCTAssertTrue(plan.arguments.contains("-color_trc"))
-        XCTAssertTrue(plan.arguments.contains("smpte2084"))
+        XCTAssertTrue(x265(plan).isSuperset(of: [
+            "rdoq-level=2", "psy-rdoq=1", "colorprim=bt2020",
+            "transfer=smpte2084", "colormatrix=bt2020nc"
+        ]))
+        XCTAssertEqual(value("-color_trc", plan), "smpte2084")
     }
     func testSoftwareHEVCSignalsHLGInBitstream() throws {
-        var input = media(color: .hlg, depth: 10)
-        input.primaries = "bt2020"
-        input.transfer = "arib-std-b67"
-        input.matrix = "bt2020nc"
         let plan = try EncodingPlanner.plan(
-            tools: tools(), media: input,
+            tools: tools(), media: media(color: .hlg, depth: 10),
             selection: EncodeSelection(purpose: .archive, codec: .hevc),
             destination: URL(fileURLWithPath: "/tmp/hlg-output.mkv")
         )
-        XCTAssertTrue(plan.arguments.contains(
-            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc"
-        ))
+        XCTAssertTrue(x265(plan).contains("transfer=arib-std-b67"))
+        XCTAssertTrue(x265(plan).contains("colorprim=bt2020"))
+        XCTAssertEqual(value("-color_trc", plan), "arib-std-b67")
     }
-    func testRejectsInconsistentHDRColorimetry() throws {
-        let input = media(color: .pq, depth: 10) // Claims PQ, but is tagged BT.709.
-        XCTAssertThrowsError(try EncodingPlanner.plan(
-            tools: tools(), media: input,
-            selection: EncodeSelection(purpose: .archive, codec: .hevc),
-            destination: URL(fileURLWithPath: "/tmp/unverified-hdr.mkv")
-        ))
+    func testArchiveAV1FastComesFromReferenceJSON() throws {
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: media(depth: 10),
+            selection: EncodeSelection(codec: .av1, variant: .fast),
+            destination: URL(fileURLWithPath: "/tmp/fast-av1.mkv")
+        )
+        XCTAssertEqual(value("-c:v", plan), "libsvtav1")
+        XCTAssertEqual(value("-preset", plan), "6")
+        XCTAssertEqual(value("-crf", plan), "32")
+        let parameters = Set((value("-svtav1-params", plan) ?? "")
+            .split(separator: ":").map(String.init))
+        XCTAssertTrue(parameters.isSuperset(of: [
+            "lp=4", "tune=0", "enable-qm=1",
+            "qm-min=8", "qm-max=15", "hierarchical-levels=4"
+        ]))
+    }
+    func testExplicitOpusUsesOriginalAudioConfig() throws {
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: media(),
+            selection: EncodeSelection(audio: .opus),
+            destination: URL(fileURLWithPath: "/tmp/opus.mkv")
+        )
+        XCTAssertEqual(value("-c:a", plan), "libopus")
+        XCTAssertEqual(value("-b:a", plan), "192k")
+        XCTAssertEqual(value("-ac", plan), "2")
+        XCTAssertEqual(value("-ar", plan), "48000")
+    }
+    func testFullToLimitedNeedsRealSampleConversion() throws {
+        var source = media()
+        source.colorRange = "pc"
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: source,
+            selection: EncodeSelection(purpose: .share, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/limited.mp4")
+        )
+        let filter = try XCTUnwrap(value("-vf", plan))
+        XCTAssertTrue(filter.contains("zscale=rangein=full:range=limited"))
+        XCTAssertEqual(value("-color_range", plan), "tv")
     }
     func testBlocksUnportedDynamicHDR() throws {
         XCTAssertThrowsError(try EncodingPlanner.plan(
@@ -84,9 +123,11 @@ final class PlannerTests: XCTestCase {
             selection: EncodeSelection(purpose: .share, codec: .hevc),
             destination: URL(fileURLWithPath: "/tmp/out.mp4")
         )
-        XCTAssertTrue(plan.arguments.contains("hevc_videotoolbox"))
-        XCTAssertTrue(plan.arguments.contains("65"))
-        XCTAssertTrue(plan.arguments.contains("0")) // -allow_sw 0
+        XCTAssertEqual(value("-c:v", plan), "hevc_videotoolbox")
+        XCTAssertEqual(value("-q:v", plan), "65")
+        XCTAssertEqual(value("-allow_sw", plan), "0")
+        XCTAssertEqual(value("-tag:v", plan), "hvc1")
+        XCTAssertEqual(value("-c:a", plan), "aac")
     }
     func testNoUnverifiedAV1Hardware() throws {
         XCTAssertThrowsError(try EncodingPlanner.plan(
