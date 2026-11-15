@@ -9,7 +9,7 @@
 | AVKit 预览 | 初版 | 非原生解码素材的后备方案、HDR 预览实测 |
 | FFmpeg 进度/取消/临时输出 | 初版 | 失败、信号、覆盖、磁盘不足和长任务测试 |
 | SDR HEIC/JPEG/PNG | 初版 | 图片方向、颜色与元数据检查 |
-| Apple HDR HEIC | 未实现 | 10-bit PQ / HLG 到 PQ 流程、色度和 EDR 实机验证 |
+| Apple HDR HEIC | 10-bit PQ 初版（实验性、待 CI） | AVAssetReader P010 → Core Image PQ → HEIF10；HLG、色度与 EDR 实机验证待完成 |
 | Gain Map HEIC | 未实现 | SDR base + HDR gain map、Photos 原生显示验证 |
 | Apple Live Photo | 未实现 | paired video / still metadata、PhotoKit 导入检验 |
 | Dolby Vision / HDR10+ | 未实现 | 原始动态元数据跨帧保留、无降级 |

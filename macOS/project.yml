@@ -23,6 +23,8 @@ targets:
       - path: LumaRecodeApp
     dependencies:
       - package: LumaCore
+      - package: LumaCore
+        product: LumaPhotos
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.miku552.LumaRecodeMac

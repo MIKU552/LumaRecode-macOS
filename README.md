@@ -70,3 +70,7 @@ open macOS/LumaRecode.xcodeproj
 ## Swift 6.4 / 严格并发
 
 使用 Xcode 27.1 的 Swift 6.4 编译器，Swift Package 启用 `swift-tools-version: 6.4` 与 Swift 6 语言模式，Xcode 工程设置 `SWIFT_VERSION: 6.0`（语言模式名称，**不是** 6.0 编译器版本）。已开始处理 Swift 6 严格并发诊断；最终兼容性须经后续 CI 验证。
+
+## HDR HEIC（Apple 原生、实验性）
+
+新增 `LumaPhotos` Swift Package：通过 AVFoundation 的 10-bit P010 解码、Core Image 的 BT.2100 PQ 色彩空间及 `CIContext.writeHEIF10Representation` 输出真正的 10-bit HDR HEIC，而不是用 SDR JPEG 冒充 HDR。当前仅启用 **10-bit BT.2020 PQ 静态 HDR、无 Dolby Vision/HDR10+** 的视频输入。该路径已接入照片工作区，**尚需 CI、实机色彩及 Apple Photos 检查**；HLG、HDR Gain Map 和 Live Photo 继续开发。

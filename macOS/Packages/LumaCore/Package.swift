@@ -6,12 +6,15 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "LumaCore", targets: ["LumaCore"]),
+        .library(name: "LumaPhotos", targets: ["LumaPhotos"]),
         .executable(name: "lumarecode", targets: ["LumaCLI"])
     ],
     targets: [
         .target(name: "LumaCore", path: "Sources/LumaCore"),
+        .target(name: "LumaPhotos", dependencies: ["LumaCore"], path: "Sources/LumaPhotos"),
         .executableTarget(name: "LumaCLI", dependencies: ["LumaCore"]),
-        .testTarget(name: "LumaCoreTests", dependencies: ["LumaCore"])
+        .testTarget(name: "LumaCoreTests", dependencies: ["LumaCore"]),
+        .testTarget(name: "LumaPhotosTests", dependencies: ["LumaPhotos"])
     ],
     swiftLanguageModes: [.v6]
 )
