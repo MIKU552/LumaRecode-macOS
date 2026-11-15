@@ -1,5 +1,6 @@
 import AppKit
 import LumaCore
+import LumaPhotos
 import SwiftUI
 
 struct PhotoWorkspace: View {
@@ -41,6 +42,24 @@ struct PhotoWorkspace: View {
                     .formStyle(.grouped)
                     Text("静态帧通过 AVFoundation 和 ImageIO 输出。此阶段仅启用已识别 SDR 输入。")
                         .foregroundStyle(.secondary).font(.callout)
+                } else if media.sourceColor == .pq && !media.dynamicHDR && media.bitDepth == 10 {
+                    Form {
+                        HStack {
+                            Slider(value: $seconds, in: 0...max(0.001, media.duration - 0.001), step: 0.1)
+                            Text(String(format: "%.1f 秒", seconds))
+                                .monospacedDigit().frame(width: 100)
+                        }
+                        LabeledContent("输出格式", value: "10-bit PQ HEIC")
+                        LabeledContent("色彩空间", value: "ITU-R BT.2100 PQ")
+                        Button(exporting ? "正在导出…" : "导出 HDR HEIC（实验性）") {
+                            chooseHDRDestination(media: media)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(exporting)
+                    }
+                    .formStyle(.grouped)
+                    Text("使用 Apple AVFoundation / Core Image 的 10-bit PQ 路径；当前仅限静态 PQ/BT.2020、无动态 HDR 的源。尚未完成实机色彩与 Photos 兼容验证。")
+                        .foregroundStyle(.secondary).font(.callout)
                 } else {
                     ContentUnavailableView("HDR / Log 照片导出尚未完成",
                         systemImage: "photo.badge.exclamationmark",
@@ -54,6 +73,32 @@ struct PhotoWorkspace: View {
         }
         .padding(24)
         .onChange(of: model.sourceURL) { _, _ in seconds = 0 }
+    }
+
+    private func chooseHDRDestination(media: MediaInfo) {
+        let panel = NSSavePanel()
+        panel.title = "导出 10-bit HDR HEIC（实验性）"
+        panel.nameFieldStringValue = media.url.deletingPathExtension().lastPathComponent
+            + "_HDR_\(Int(seconds * 1000)).heic"
+        panel.directoryURL = media.url.deletingLastPathComponent()
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.heic]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                exporting = true
+                defer { exporting = false }
+                do {
+                    try await AppleHDRPhotoExporter.exportPQ(from: media, at: seconds, to: url)
+                    model.jobs.insert(JobRecord(
+                        name: media.url.lastPathComponent, outcome: .success,
+                        detail: "PQ HEIC 已保存至 \(url.lastPathComponent)（实验性）", fileURL: url
+                    ), at: 0)
+                } catch {
+                    model.present(error)
+                }
+            }
+        }
     }
 
     private func chooseDestination(source: URL) {
