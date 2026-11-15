@@ -54,6 +54,11 @@ struct LumaCLI {
         Frame trim uses zero-based display frames and an end-exclusive boundary.
         --start-frame / --end-frame and --start-time / --end-time are mutually exclusive.
         Audio tracks are re-encoded (AAC by default), never stream-copied during trimming.
+        HEVC / AV1 conversions audit all decoded HDR side data before encoding.
+        This may take time for long media; it prevents silent late HDR loss
+        when the source decoder exposes the metadata.
+        Status events report auditingSource, checkingTools, encoding,
+        verifyingOutput, and publishing.
 
         Format policy (from Windows OutputPolicy):
           --sampling auto|source|420|422|444|gray

@@ -112,3 +112,14 @@ lumarecode convert camera.mov --purpose archive --codec hevc \\
 基于 Windows `Core/Transcoder.cs` 的 `HdrMetadata` 与 `VerifyAsync`，Swift `HDRStaticMetadata` 从 FFprobe 的流/解码帧侧数据读取母版色度、最大/最小亮度与 MaxCLL/MaxFALL。软件 HEVC PQ 归档通过 x265 写入 `master-display`、`max-cll`、`hdr10=1`、`hdr10-opt=1`、`repeat-headers=1`，发布前再读取并按 HEVC SEI 量化步长逐字段验证。**首版仅对被探测到静态元数据的 BT.2020 PQ 素材开放软件 HEVC 归档；不支持静态元数据的 AV1、VideoToolbox 等尚未实测的组合。** 非完整、冲突或超出 SEI 范围的元数据会被拒绝。动态 HDR（Dolby Vision/HDR10+）仍不支持。首帧有限探测不保证识别整个视频中后期出现的动态元数据，仍需后续全片位流检查。
 
 真实 FFmpeg/x265 合成样片的 Mastering Display 与 MaxCLL/MaxFALL 在编码前后已验证一致；macOS 专项 CI 以 `test-static-hdr10.sh` 的实际运行结果为准。
+
+## 逐帧 HDR 元数据安全扫描
+
+HEVC / AV1 输入在正式编码前，使用用户安装的 `ffprobe` **逐帧解码并扫描整个素材**，而不仅是探测开头 3 帧。新增的 `HDRSideDataSweep` 按行处理精简 side-data 输出，保持有限内存占用，可以被用户取消；SwiftUI 和 CLI 会报告「检查 HDR 元数据 → 编码 → 验证 → 保存」阶段。
+
+- 如后半段首次出现 HDR10+ / Dolby Vision side data、Mastering Display 或 MaxCLL/MaxFALL，会拒绝可能丢失这些数据的转换。
+- 对已识别的静态 HDR10，检查全片出现的 Mastering Display / Content Light 数值是否与源文件初始元数据一致；若改变或缺失必要字段，拒绝处理。
+- **局限**：这是 FFmpeg 解码器可见的 side-data 审计，不能保证识别解码器未暴露的 Dolby Vision RPU 或私有动态元数据。因此未声称“已经完整支持动态 HDR”；严格的位流级扫描和原始动态元数据保留仍未实现。
+- 因为必须完整解码一次以检查，长视频或高分辨率素材的转换准备阶段会变长，这是优先避免无声 HDR 元数据损失的安全取舍。
+
+FFmpeg / ffprobe 仍由用户自行安装，项目不内嵌任何多媒体可执行程序或库。

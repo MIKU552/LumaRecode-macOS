@@ -26,3 +26,7 @@ Camera LUT compliance: Pocket 3 uses OpenOSV's Apache-2.0 resource with verbatim
 
 Reference: Windows `Core/Transcoder.cs:HdrMetadata` (source SI rationals -> x265 integer units) and `VerifyAsync` (target SEI quantization tolerance).
 Native: `HDRStaticMetadata.swift`, `MediaProbe.swift`, `EncodingPlanner.swift`, `OutputVerifier.swift`. Mastering xy ×50000; luminance ×10000; content light fields exact. Software HEVC PQ path only, all untested paths fail closed. CI: `macOS/ci/test-static-hdr10.sh` creates x265 HDR10 with known 1000/400 nits, verifies real output SEI and rejects AV1.
+
+## Full source HDR safety audit
+
+Windows provenance: `MediaProbe.cs` collects stream and early frame side data; `Transcoder.cs VerifyAsync` checks static HDR mastering/light metadata and dynamic HDR. Native macOS adds `HDRSideDataSweep` as a conservative extra preflight over all decoded HEVC/AV1 frames, rejecting later HDR10+/Dolby Vision evidence, unreported static SEI and inconsistent mastering/MaxCLL values. The compact ffprobe side-data stream is bounded and cancellable. This is not bitstream-level RPU preservation; DRM/proprietary metadata hidden by the decoder may still escape detection.

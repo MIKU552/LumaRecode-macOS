@@ -78,3 +78,9 @@ Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus �
 ## HDR10 静态元数据实现（2026-11-15）
 
 新增 `HDRStaticMetadata.swift`，严格解析 Mastering Display（8 个 xy 色度、最大/最小亮度）和 MaxCLL/MaxFALL。遵循 Windows `Transcoder.HdrMetadata` 的 x265 整数单位：色度 × 50000，亮度 × 10000；只对源 BT.2020/PQ 且软件 HEVC 归档启用。编码后 `OutputVerifier` 在目标 HEVC 允许的一步量化容差内比较各字段，验证通过前不发布目标文件。缺字段、不同帧冲突、值溢出、静态 HDR 的 AV1 / VideoToolbox 路径均被拒绝。新增 Swift 单元测试与真实 FFmpeg CI 合成 HDR10 元数据保留测试；实际验收仍以最新 Actions 结果为准。
+
+## 全片 HDR side-data 审计（新增）
+
+`HDRSideDataSweep.swift` 对 HEVC / AV1 在正式编码前运行一次完整 `ffprobe -show_frames`，使用 `-show_entries frame=:frame_side_data=...` 和 compact 行输出以限制内存占用。新增单元测试针对第五帧才出现 HDR10+、后续首次出现静态 HDR、母版色度/内容亮度被篡改、取消与不可解码输入。Mac App 会显示审计、能力检查、编码和验收阶段。
+
+此审计仅覆盖 FFmpeg 解码器**公开**的侧数据，不保证所有 Dolby Vision RPU 均会被识别，不能等同于动态 HDR 无损保留。完整的动态 HDR 位流审计及写回仍在待实现列表。
