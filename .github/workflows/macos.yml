@@ -101,6 +101,13 @@ jobs:
       - name: Verify HDR10 mastering display and MaxCLL/MaxFALL retention
         run: bash macOS/ci/test-static-hdr10.sh
 
+      - name: Verify Apple Photos accepts native paired Live Photo resources
+        env:
+          LUMA_LIVE_PHOTO_CI: "1"
+        run: |
+          swift test --package-path macOS/Packages/LumaCore \
+            --filter AppleLivePhotoTests/testNativeApplePairFromRealSDRMovie
+
       - name: Verify PQ video to native HEIC10 pipeline
         env:
           LUMA_PQ_VIDEO_CI: "1"
