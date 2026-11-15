@@ -85,7 +85,7 @@ final class HDRSideDataSweepTests: XCTestCase {
             )
             XCTFail("Late HDR10+ was not rejected.")
         } catch LumaError.unsupported(let message) {
-            XCTAssertTrue(message.contains("Dynamic HDR"), message)
+            XCTAssertTrue(message.contains("HDR10+") && message.contains("Dolby Vision"), message)
         }
     }
 
