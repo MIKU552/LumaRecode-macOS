@@ -71,11 +71,51 @@ public struct MediaInfo: Codable, Equatable, Sendable {
     }
 }
 
+public enum SamplingChoice: String, Codable, Sendable, CaseIterable, Identifiable {
+    case automatic = "auto", source, yuv420 = "420", yuv422 = "422", yuv444 = "444", gray
+    public var id: String { rawValue }
+}
+public enum BitDepthChoice: String, Codable, Sendable, CaseIterable, Identifiable {
+    case automatic = "auto", eight = "8", ten = "10", twelve = "12"
+    public var id: String { rawValue }
+}
+public enum SampleRangeChoice: String, Codable, Sendable, CaseIterable, Identifiable {
+    case automatic = "auto", source, limited, full
+    public var id: String { rawValue }
+}
+public enum AudioChoice: String, Codable, Sendable, CaseIterable, Identifiable {
+    case automatic = "auto", copy, aac, opus, flac
+    public var id: String { rawValue }
+}
+public enum EncodingVariant: String, Codable, Sendable, CaseIterable, Identifiable {
+    case standard, fast
+    public var id: String { rawValue }
+}
+
 public struct EncodeSelection: Codable, Equatable, Sendable {
     public var purpose: EncodePurpose
     public var codec: VideoCodec
-    public init(purpose: EncodePurpose = .archive, codec: VideoCodec = .hevc) {
-        self.purpose = purpose; self.codec = codec
+    public var sampling: SamplingChoice
+    public var bitDepth: BitDepthChoice
+    public var colorRange: SampleRangeChoice
+    public var audio: AudioChoice
+    public var variant: EncodingVariant
+
+    public init(
+        purpose: EncodePurpose = .archive, codec: VideoCodec = .hevc,
+        sampling: SamplingChoice = .automatic,
+        bitDepth: BitDepthChoice = .automatic,
+        colorRange: SampleRangeChoice = .automatic,
+        audio: AudioChoice = .automatic,
+        variant: EncodingVariant = .standard
+    ) {
+        self.purpose = purpose
+        self.codec = codec
+        self.sampling = sampling
+        self.bitDepth = bitDepth
+        self.colorRange = colorRange
+        self.audio = audio
+        self.variant = variant
     }
 }
 
