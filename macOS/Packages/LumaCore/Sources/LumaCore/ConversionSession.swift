@@ -57,20 +57,7 @@ public final class ConversionSession: @unchecked Sendable {
             throw LumaError.validationFailed("Encoder output is empty.")
         }
         let output = try await MediaProbe.inspect(tools: tools, url: plan.temporary)
-        guard output.codec == plan.expectedCodec.ffprobeName else {
-            throw LumaError.validationFailed("Output codec differs from the requested codec.")
-        }
-        guard output.width > 0, output.height > 0 else {
-            throw LumaError.validationFailed("Output has no valid picture dimensions.")
-        }
-        if source.sourceColor.isHDR {
-            guard output.sourceColor == source.sourceColor, output.bitDepth >= 10 else {
-                throw LumaError.validationFailed("Output lost its HDR transfer or 10-bit precision.")
-            }
-        }
-        guard output.audioCodecs.count == source.audioCodecs.count else {
-            throw LumaError.validationFailed("Output audio-track count differs from the source.")
-        }
+        try OutputVerifier.verify(source: source, encoded: output, plan: plan)
         if isCancelled() { throw LumaError.cancelled }
 
         // Publish only after complete output verification, preserving the original on error.
