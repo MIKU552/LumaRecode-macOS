@@ -74,3 +74,13 @@ open macOS/LumaRecode.xcodeproj
 ## HDR HEIC（Apple 原生、实验性）
 
 新增 `LumaPhotos` Swift Package：通过 AVFoundation 的 10-bit P010 解码、Core Image 的 BT.2100 PQ 色彩空间及 `CIContext.writeHEIF10Representation` 输出真正的 10-bit HDR HEIC，而不是用 SDR JPEG 冒充 HDR。当前仅启用 **10-bit BT.2020 PQ 静态 HDR、无 Dolby Vision/HDR10+** 的视频输入。该路径已接入照片工作区，**尚需 CI、实机色彩及 Apple Photos 检查**；HLG、HDR Gain Map 和 Live Photo 继续开发。
+
+## 外部 FFmpeg（不随应用分发）
+
+本项目的发行版不会包含 FFmpeg、ffprobe 或其编解码器。用户自行安装，例如 `brew install ffmpeg-full`，也可在 macOS 系统「设置 → 媒体工具」中用原生文件选择器指定其他 FFmpeg/ffprobe 路径。设置页提供实际编码器与 `zscale` 滤镜能力诊断。
+
+项目根目录的 `LICENSE` 为 MIT，仅管理项目自身代码和资源。自行安装的 FFmpeg 及 x264/x265 等依赖遵守其各自许可。CI 使用 Homebrew 临时安装工具进行测试，构建 Artifact 不打包这些工具。
+
+## 精确逐帧裁剪（初版）
+
+Swift Package 提供 `FrameTrimPlanner`，支持 CLI `--start-frame / --end-frame`（从零开始，终点不包含）或 `--start-time / --end-time`。Mac 原生 Inspector 提供从第 1 帧开始的包含式选择器，内部统一映射到 PTS 时间轴。裁剪会重新编码音轨（默认 AAC），并在发布前解码检查帧数。此阶段不启用依赖关键帧位置的快速输入 seek，优先保证 B 帧素材处理正确；变帧率、特殊负 PTS、音频偏移需要继续验证。
