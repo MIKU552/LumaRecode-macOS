@@ -212,6 +212,9 @@ struct LumaCLI {
                 overwrite: words.contains("--overwrite"),
                 expectedFrames: trimmed?.window.count,
                 progressDuration: trimmed?.window.duration,
+                onPhase: { phase in
+                    emit("status", ["phase": phase.rawValue])
+                },
                 onProgress: { p in
                     emit("progress", ["percent": p.fraction * 100,
                                       "position_seconds": p.seconds,

@@ -179,6 +179,17 @@ final class WorkspaceModel {
                     overwrite: FileManager.default.fileExists(atPath: outputURL.path),
                     expectedFrames: trimmed?.window.count,
                     progressDuration: trimmed?.window.duration,
+                    onPhase: { [weak self] phase in
+                        Task { @MainActor in
+                            self?.status = switch phase {
+                            case .auditingSource: "正在扫描全片 HDR 元数据…"
+                            case .checkingTools: "正在验证 FFmpeg 编码器与滤镜…"
+                            case .encoding: "正在编码…"
+                            case .verifyingOutput: "正在校验输出视频与元数据…"
+                            case .publishing: "正在保存已验证文件…"
+                            }
+                        }
+                    },
                     onProgress: { [weak self] update in
                         Task { @MainActor in self?.progress = update }
                     }

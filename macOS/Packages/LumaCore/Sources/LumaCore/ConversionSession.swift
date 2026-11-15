@@ -1,6 +1,16 @@
 import Foundation
 import Synchronization
 
+/// Stages are surfaced to the native app and CLI without relying on FFmpeg
+/// progress output during full-frame source validation.
+public enum ConversionPhase: String, Codable, Sendable {
+    case auditingSource
+    case checkingTools
+    case encoding
+    case verifyingOutput
+    case publishing
+}
+
 /// A single-use, cancellable conversion. Never writes directly to the final destination.
 public final class ConversionSession: @unchecked Sendable {
     private let lock = NSLock()
@@ -35,6 +45,7 @@ public final class ConversionSession: @unchecked Sendable {
         overwrite: Bool = false,
         expectedFrames: Int? = nil,
         progressDuration: Double? = nil,
+        onPhase: @escaping @Sendable (ConversionPhase) -> Void = { _ in },
         onProgress: @escaping @Sendable (TranscodeProgress) -> Void = { _ in }
     ) async throws -> URL {
         let fm = FileManager.default
@@ -49,6 +60,7 @@ public final class ConversionSession: @unchecked Sendable {
         }
         defer { try? fm.removeItem(at: plan.temporary) }
         if isCancelled() { throw LumaError.cancelled }
+        if ["hevc", "av1"].contains(source.codec) { onPhase(.auditingSource) }
         // MediaProbe samples initial frames for UI responsiveness. A complete
         // preflight is mandatory when encoding codecs that may carry HDR10+
         // or Dolby Vision in later frames, before publishing any output.
@@ -58,8 +70,10 @@ public final class ConversionSession: @unchecked Sendable {
             isCancelled: { [weak self] in self?.isCancelled() ?? true }
         )
         if isCancelled() { throw LumaError.cancelled }
+        onPhase(.checkingTools)
         try await MediaRequirements.check(tools: tools, plan: plan)
         if isCancelled() { throw LumaError.cancelled }
+        onPhase(.encoding)
         try await run(plan: plan, duration: progressDuration ?? source.duration, onProgress: onProgress)
         if isCancelled() { throw LumaError.cancelled }
         guard fm.fileExists(atPath: plan.temporary.path) else {
@@ -69,6 +83,7 @@ public final class ConversionSession: @unchecked Sendable {
         guard (attributes[.size] as? NSNumber)?.int64Value ?? 0 > 0 else {
             throw LumaError.validationFailed("Encoder output is empty.")
         }
+        onPhase(.verifyingOutput)
         let output = try await MediaProbe.inspect(tools: tools, url: plan.temporary)
         try OutputVerifier.verify(source: source, encoded: output, plan: plan)
         // Full decode is deliberate for trimmed output. The exact display frame
@@ -80,6 +95,7 @@ public final class ConversionSession: @unchecked Sendable {
         }
         if isCancelled() { throw LumaError.cancelled }
 
+        onPhase(.publishing)
         // Publish only after complete output verification, preserving the original on error.
         if fm.fileExists(atPath: plan.destination.path) {
             guard overwrite else { throw LumaError.invalidInput("Destination exists.") }
