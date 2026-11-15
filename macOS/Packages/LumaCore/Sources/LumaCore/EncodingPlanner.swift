@@ -10,7 +10,7 @@ public enum EncodingPlanner {
     public static func destination(
         for media: MediaInfo, selection: EncodeSelection, directory: URL
     ) -> URL {
-        let marker = media.sourceColor.isHDR ? "HDR" : "SDR"
+        let marker = selection.logProfile != nil ? "HLG" : media.sourceColor.isHDR ? "HDR" : "SDR"
         let name = media.url.deletingPathExtension().lastPathComponent
         return directory.appendingPathComponent(
             "\(name)_\(marker)_\(selection.codec.rawValue)_\(selection.purpose.rawValue).\(suffix(for: selection))"
@@ -75,11 +75,13 @@ public enum EncodingPlanner {
         }
         let temp = destination.deletingLastPathComponent()
             .appendingPathComponent(".luma-\(UUID().uuidString).\(ext)")
-        let primaries = media.sourceColor.isHDR ? "bt2020" : media.primaries
-        let transfer = media.sourceColor.isHDR
-            ? (media.sourceColor == .hlg ? "arib-std-b67" : "smpte2084")
-            : media.transfer
-        let matrix = media.sourceColor.isHDR ? "bt2020nc" : media.matrix
+        let logConversion = selection.logProfile != nil
+        let primaries = media.sourceColor.isHDR || logConversion ? "bt2020" : media.primaries
+        let transfer = logConversion ? "arib-std-b67" :
+            media.sourceColor.isHDR
+                ? (media.sourceColor == .hlg ? "arib-std-b67" : "smpte2084")
+                : media.transfer
+        let matrix = media.sourceColor.isHDR || logConversion ? "bt2020nc" : media.matrix
         let rangeTag = resolved.sampleRange == "full" ? "pc" : "tv"
         let format: String
         if selection.purpose == .share {
@@ -92,16 +94,26 @@ public enum EncodingPlanner {
             "-hide_banner", "-nostdin", "-y", "-xerror",
             "-loglevel", "error", "-nostats", "-progress", "pipe:1",
             "-i", media.url.path,
-            "-map", "0:\(media.videoStreamIndex)", "-map", "0:a?", "-map_metadata", "0",
+            "-map", "0:\(media.videoStreamIndex)", "-map", "0:a?",
+            "-map_metadata", logConversion ? "-1" : "0",
             "-map_chapters", "0", "-sn", "-dn"
         ]
-        var filters = [sourceFrameTags(media, sourceRange: resolved.sourceRange)]
-        if resolved.sampleRange != resolved.sourceRange {
-            // Windows uses zscale with error diffusion for sample-range changes.
-            // Metadata relabeling alone would change brightness incorrectly.
-            filters.append(
-                "zscale=rangein=\(resolved.sourceRange):range=\(resolved.sampleRange):dither=error_diffusion"
-            )
+        var filters: [String] = []
+        if let profile = selection.logProfile {
+            // Mirrors Transcoder.LogFilter: float RGB LUT before 16-bit HLG
+            // intermediate and error-diffused output quantization.
+            filters = try CameraLogPipeline.filters(media: media, profile: profile)
+            if resolved.sampleRange == "full" {
+                filters.append("zscale=rangein=limited:range=full:dither=error_diffusion")
+            }
+        } else {
+            filters.append(sourceFrameTags(media, sourceRange: resolved.sourceRange))
+            if resolved.sampleRange != resolved.sourceRange {
+                // Pixel conversion; range metadata relabeling is insufficient.
+                filters.append(
+                    "zscale=rangein=\(resolved.sourceRange):range=\(resolved.sampleRange):dither=error_diffusion"
+                )
+            }
         }
         filters.append("format=\(format)")
         filters.append(frameTags(

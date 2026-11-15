@@ -40,20 +40,26 @@ public enum OutputVerifier {
         try require(actualRange == desiredRange,
                     "Output sample range \(encoded.colorRange) does not match \(desiredRange).")
 
-        for (label, sourceValue, finalValue) in [
-            ("color primaries", source.primaries, encoded.primaries),
-            ("transfer function", source.transfer, encoded.transfer),
-            ("color matrix", source.matrix, encoded.matrix)
-        ] where isSpecified(sourceValue) {
-            try require(sourceValue == finalValue,
-                        "Output \(label) \(finalValue) differs from source \(sourceValue).")
+        if selected.logProfile == nil {
+            // Camera Log conversion intentionally changes transfer, matrix and
+            // primaries; comparing source Log tags against HLG would be wrong.
+            for (label, sourceValue, finalValue) in [
+                ("color primaries", source.primaries, encoded.primaries),
+                ("transfer function", source.transfer, encoded.transfer),
+                ("color matrix", source.matrix, encoded.matrix)
+            ] where isSpecified(sourceValue) {
+                try require(sourceValue == finalValue,
+                            "Output \(label) \(finalValue) differs from source \(sourceValue).")
+            }
         }
-        if source.sourceColor.isHDR {
-            try require(encoded.sourceColor == source.sourceColor
+        let expectedColor: SourceColor = selected.logProfile == nil
+            ? source.sourceColor : .hlg
+        if expectedColor.isHDR {
+            try require(encoded.sourceColor == expectedColor
                 && encoded.primaries == "bt2020"
                 && encoded.matrix == "bt2020nc"
                 && encoded.bitDepth >= 10,
-                "Output is no longer the original BT.2020 HDR transfer / 10-bit signal.")
+                "Output no longer carries the expected BT.2020 HDR transfer / 10-bit signal.")
         } else {
             try require(encoded.sourceColor == .sdr,
                         "Output no longer carries valid SDR transfer metadata.")

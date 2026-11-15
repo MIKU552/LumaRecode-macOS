@@ -67,12 +67,34 @@ public enum VideoOutputPolicy {
         let maximum = max(8, media.bitDepth)
         let caps = selection.purpose == .share && selection.codec == .avc ? [8] :
             selection.purpose == .archive && selection.codec == .hevc ? [8, 10, 12] : [8, 10]
-        return caps.filter { $0 <= maximum && (!media.sourceColor.isHDR || $0 >= 10) }
+        return caps.filter {
+            $0 <= maximum && (!(media.sourceColor.isHDR || selection.logProfile != nil) || $0 >= 10)
+        }
     }
 
     public static func resolve(_ media: MediaInfo, selection: EncodeSelection) throws -> ResolvedVideoFormat {
-        guard [.sdr, .hlg, .pq].contains(media.sourceColor) else {
-            throw LumaError.unsupported("Log, RAW and unknown source color need their dedicated original pipeline.")
+        let logConversion = selection.logProfile != nil
+        if logConversion {
+            guard media.sourceColor == .log
+                || (selection.interpretAsLog && [.sdr, .unknown].contains(media.sourceColor)) else {
+                throw LumaError.invalidInput(
+                    "Select the actual camera Log source, or explicitly enable manual Log interpretation."
+                )
+            }
+            guard selection.purpose == .archive && selection.codec != .avc else {
+                throw LumaError.unsupported(
+                    "Camera Log -> HLG is initially supported by software HEVC / AV1 archiving only."
+                )
+            }
+            guard media.bitDepth >= 10 else {
+                throw LumaError.unsupported("The original camera Log LUT pipeline requires a 10-bit or higher source.")
+            }
+        } else {
+            guard [.sdr, .hlg, .pq].contains(media.sourceColor) else {
+                throw LumaError.unsupported(
+                    "Camera Log requires a selected original camera LUT; RAW/unknown need their own processing."
+                )
+            }
         }
         guard !media.dynamicHDR else {
             throw LumaError.unsupported("Dolby Vision and HDR10+ per-frame metadata preservation is not yet ported.")
@@ -80,7 +102,7 @@ public enum VideoOutputPolicy {
         guard media.width > 0, media.height > 0, media.bitDepth > 0 else {
             throw LumaError.invalidInput("Invalid picture size or pixel precision.")
         }
-        guard !(media.sourceColor.isHDR && selection.codec == .avc) else {
+        guard !((media.sourceColor.isHDR || logConversion) && selection.codec == .avc) else {
             throw LumaError.unsupported("HDR output requires HEVC or AV1, as in Windows ResolveFormat.")
         }
         guard !(selection.purpose == .share && selection.codec == .av1) else {
@@ -125,14 +147,19 @@ public enum VideoOutputPolicy {
         let depth: Int
         if selection.bitDepth == .automatic {
             depth = selection.purpose == .archive ? depths.max()! :
-                media.sourceColor.isHDR ? 10 : 8
+                (media.sourceColor.isHDR || logConversion) ? 10 : 8
         } else {
             depth = Int(selection.bitDepth.rawValue) ?? 0
         }
         guard depths.contains(depth) else {
             throw LumaError.invalidInput("Output bit depth exceeds source precision or encoder capabilities.")
         }
-        let inputRange = sourceRange(media)
+        let inputRange: String
+        if let profile = selection.logProfile {
+            inputRange = CameraLogPipeline.decodingRange(media: media, profile: profile)
+        } else {
+            inputRange = sourceRange(media)
+        }
         let range: String
         switch selection.colorRange {
         case .automatic:
