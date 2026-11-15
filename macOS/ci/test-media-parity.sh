@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Real media checks based on Windows qa/FormatChecks/check_formats.py.
 # Uses the actual native Swift CLI; no mocked ffprobe result.
-set -euo pipefail
+set -euxo pipefail
 
 WORK="$RUNNER_TEMP/luma-parity-$$"
 mkdir -p "$WORK"
+trap 'code=$?; echo "Media parity failed at line $LINENO: $BASH_COMMAND (exit $code)" >&2; for f in "$WORK"/*.jsonl; do if [ -f "$f" ]; then echo "== $f ==" >&2; tail -n 12 "$f" >&2; fi; done; exit "$code"' ERR
 trap 'rm -rf "$WORK"' EXIT
 CLI="$(swift build --package-path macOS/Packages/LumaCore --configuration release --show-bin-path)/lumarecode"
 test -x "$CLI"
