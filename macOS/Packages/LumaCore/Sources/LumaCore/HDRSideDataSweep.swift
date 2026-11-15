@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// A bounded full-decode preflight for codecs that may carry HDR10+ or Dolby
 /// Vision metadata in frames beyond the few inspected by MediaProbe.
@@ -62,8 +63,7 @@ public enum HDRSideDataSweep {
                 let stderr = Pipe()
                 process.standardOutput = stdout
                 process.standardError = stderr
-                let stderrTail = NSLock()
-                var diagnostic = Data()
+                let stderrTail = Mutex(Data())
                 let stderrGroup = DispatchGroup()
                 do {
                     if isCancelled() { throw LumaError.cancelled }
@@ -81,9 +81,7 @@ public enum HDRSideDataSweep {
                                 tail.removeFirst(tail.count - 32 * 1024)
                             }
                         }
-                        stderrTail.lock()
-                        diagnostic = tail
-                        stderrTail.unlock()
+                        stderrTail.withLock { $0 = tail }
                         stderrGroup.leave()
                     }
 
@@ -155,9 +153,9 @@ public enum HDRSideDataSweep {
                     if let checkError { throw checkError }
                     if isCancelled() { throw LumaError.cancelled }
                     guard process.terminationStatus == 0 else {
-                        stderrTail.lock()
-                        let message = String(decoding: diagnostic, as: UTF8.self)
-                        stderrTail.unlock()
+                        let message = stderrTail.withLock {
+                            String(decoding: $0, as: UTF8.self)
+                        }
                         throw LumaError.processFailed(
                             "Could not audit all decoded HDR frames: \(message)"
                         )

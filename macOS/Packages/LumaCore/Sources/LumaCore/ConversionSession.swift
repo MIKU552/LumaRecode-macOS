@@ -49,6 +49,15 @@ public final class ConversionSession: @unchecked Sendable {
         }
         defer { try? fm.removeItem(at: plan.temporary) }
         if isCancelled() { throw LumaError.cancelled }
+        // MediaProbe samples initial frames for UI responsiveness. A complete
+        // preflight is mandatory when encoding codecs that may carry HDR10+
+        // or Dolby Vision in later frames, before publishing any output.
+        try await HDRSideDataSweep.verifyBeforeEncoding(
+            tools: tools, source: source,
+            onProcess: { [weak self] process in self?.setProcess(process) },
+            isCancelled: { [weak self] in self?.isCancelled() ?? true }
+        )
+        if isCancelled() { throw LumaError.cancelled }
         try await MediaRequirements.check(tools: tools, plan: plan)
         if isCancelled() { throw LumaError.cancelled }
         try await run(plan: plan, duration: progressDuration ?? source.duration, onProgress: onProgress)
