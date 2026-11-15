@@ -97,6 +97,38 @@ struct EncodingInspector: View {
                 Text("归档默认复制所有音轨。有损音频选项按原版推荐配置执行。")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("逐帧裁剪") {
+                Toggle("按显示帧裁剪", isOn: $model.frameTrimEnabled)
+                if model.frameTrimEnabled {
+                    if let timeline = model.frameTimeline {
+                        LabeledContent("素材帧数", value: "\(timeline.count)")
+                        Stepper(value: $model.trimStartFrame, in: 1...max(1, model.trimEndFrame)) {
+                            Text("起始帧（含）：\(model.trimStartFrame)")
+                        }
+                        Stepper(value: $model.trimEndFrame, in: model.trimStartFrame...timeline.count) {
+                            Text("结束帧（含）：\(model.trimEndFrame)")
+                        }
+                        Text("与 Windows 版一致：界面从第 1 帧编号，内部使用从 0 开始、终点不包含的 PTS 帧范围。")
+                            .font(.caption).foregroundStyle(.secondary)
+                        if model.selection.audio == .copy {
+                            Label("裁剪时不能复制音轨，请选择自动、AAC 或 Opus。", systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange).font(.caption)
+                        } else if model.selection.audio == .automatic {
+                            Text("裁剪时自动将音轨重新编码为 AAC，以避免原音轨未经裁剪。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button("建立精确 PTS 帧索引") {
+                            self.model.loadFrameTimeline()
+                        }
+                        .disabled(model.media == nil || model.indexingFrames)
+                        if model.indexingFrames {
+                            ProgressView("正在读取显示帧…")
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
             Section("输入色彩") {
                 if let info = model.media {
                     LabeledContent("类别", value: info.sourceColor.rawValue.uppercased())
