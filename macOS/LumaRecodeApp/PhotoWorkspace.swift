@@ -1,7 +1,9 @@
 import AppKit
 import LumaCore
 import LumaPhotos
+import Photos
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PhotoWorkspace: View {
     @Environment(WorkspaceModel.self) private var model
@@ -9,6 +11,8 @@ struct PhotoWorkspace: View {
     @State private var format: StillFormat = .heic
     @State private var quality = 0.95
     @State private var exporting = false
+    @State private var livePhotoPair: LivePhotoPair?
+    @State private var importingLivePhoto = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -42,6 +46,28 @@ struct PhotoWorkspace: View {
                     .formStyle(.grouped)
                     Text("静态帧通过 AVFoundation 和 ImageIO 输出。此阶段仅启用已识别 SDR 输入。")
                         .foregroundStyle(.secondary).font(.callout)
+                    GroupBox("Apple Live Photo（实验性）") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("按选定时刻截取约 3 秒片段，生成带相同配对标识的 JPEG 与 MOV，并通过 Apple Photos 读取验证。不会创建 Google Motion Photo 容器。")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Button(exporting ? "正在创建配对资源…" : "导出 Apple Live Photo 配对文件") {
+                                chooseLivePhotoDirectory(media: media)
+                            }
+                            .disabled(exporting)
+                            if let livePhotoPair {
+                                LabeledContent("静态照片", value: livePhotoPair.still.lastPathComponent)
+                                LabeledContent("动态视频", value: livePhotoPair.movie.lastPathComponent)
+                                Button(importingLivePhoto ? "正在保存到照片图库…" : "添加为照片图库 Live Photo") {
+                                    importLivePhoto()
+                                }
+                                .disabled(importingLivePhoto || exporting)
+                                Text("此按钮会请求 macOS 照片图库权限；仅在明确点击后导入。")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                    }
                 } else if media.sourceColor == .pq && !media.dynamicHDR && media.bitDepth == 10 {
                     Form {
                         HStack {
@@ -72,7 +98,69 @@ struct PhotoWorkspace: View {
             Spacer()
         }
         .padding(24)
-        .onChange(of: model.sourceURL) { _, _ in seconds = 0 }
+        .onChange(of: model.sourceURL) { _, _ in
+            seconds = 0
+            livePhotoPair = nil
+        }
+    }
+
+    private func chooseLivePhotoDirectory(media: MediaInfo) {
+        let panel = NSOpenPanel()
+        panel.title = "选择 Apple Live Photo 配对资源保存目录"
+        panel.prompt = "选择文件夹"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = media.url.deletingLastPathComponent()
+        panel.begin { result in
+            guard result == .OK, let directory = panel.url else { return }
+            Task { @MainActor in
+                exporting = true
+                defer { exporting = false }
+                do {
+                    let name = media.url.deletingPathExtension().lastPathComponent
+                        + "_Live_\(Int(seconds * 1000))"
+                    let pair = try await AppleLivePhotoExporter.export(
+                        from: media, selectedTime: seconds,
+                        to: directory, name: name
+                    )
+                    livePhotoPair = pair
+                    model.jobs.insert(JobRecord(
+                        name: media.url.lastPathComponent, outcome: .success,
+                        detail: "Apple Live Photo 已导出：\(pair.still.lastPathComponent) + \(pair.movie.lastPathComponent)",
+                        fileURL: pair.still
+                    ), at: 0)
+                } catch {
+                    model.present(error)
+                }
+            }
+        }
+    }
+
+    private func importLivePhoto() {
+        guard let pair = livePhotoPair, !importingLivePhoto else { return }
+        importingLivePhoto = true
+        Task { @MainActor in
+            defer { importingLivePhoto = false }
+            do {
+                let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                guard status == .authorized else {
+                    throw LumaError.unsupported("未取得照片图库添加权限，配对文件仍保存在原目录。")
+                }
+                try await PHPhotoLibrary.shared().performChanges {
+                    let creation = PHAssetCreationRequest.forAsset()
+                    creation.addResource(with: .photo, fileURL: pair.still, options: nil)
+                    creation.addResource(with: .pairedVideo, fileURL: pair.movie, options: nil)
+                }
+                model.jobs.insert(JobRecord(
+                    name: pair.still.lastPathComponent, outcome: .success,
+                    detail: "照片图库已接受这对 Apple Live Photo 资源", fileURL: pair.still
+                ), at: 0)
+            } catch {
+                model.present(error)
+            }
+        }
     }
 
     private func chooseHDRDestination(media: MediaInfo) {
