@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: macos-native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core-tests:
     name: Swift Core Unit Tests
@@ -101,7 +105,32 @@ jobs:
       - name: Verify HDR10 mastering display and MaxCLL/MaxFALL retention
         run: bash macOS/ci/test-static-hdr10.sh
 
-      - name: Verify Apple Photos accepts native paired Live Photo resources
+      - name: Verify PQ video to native HEIC10 pipeline
+        env:
+          LUMA_PQ_VIDEO_CI: "1"
+        run: |
+          swift test --package-path macOS/Packages/LumaCore \
+            --filter AppleHDRPhotoTests/testExportsPQFrameFromNative10BitVideo
+
+  native-live-photo:
+    name: Apple Live Photo Pairing Integration
+    needs: core-tests
+    runs-on: xcode-27
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select Xcode 27.2
+        run: |
+          if [ -d /Applications/Xcode_27.2.app/Contents/Developer ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer" >> "$GITHUB_ENV"
+          fi
+      - name: Ensure external H.264/AAC FFmpeg for synthetic fixture
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+          ffmpeg -hide_banner -encoders | grep -E '[[:space:]]libx264[[:space:]]'
+      - name: Verify Photos accepts Apple JPEG/MOV paired resources
         env:
           LUMA_LIVE_PHOTO_CI: "1"
         run: |
@@ -113,13 +142,6 @@ jobs:
               check=True, timeout=180,
           )
           PY
-
-      - name: Verify PQ video to native HEIC10 pipeline
-        env:
-          LUMA_PQ_VIDEO_CI: "1"
-        run: |
-          swift test --package-path macOS/Packages/LumaCore \
-            --filter AppleHDRPhotoTests/testExportsPQFrameFromNative10BitVideo
 
   native-app:
     name: Build Native SwiftUI App + CLI
