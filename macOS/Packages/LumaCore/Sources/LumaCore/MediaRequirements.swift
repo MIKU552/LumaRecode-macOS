@@ -29,8 +29,14 @@ public enum MediaRequirements {
         guard let filterChain = argument("-vf", in: args) else {
             throw LumaError.validationFailed("The encoding plan has no video filter chain.")
         }
-        let required = ["zscale", "setparams", "format", "lut3d", "libplacebo", "sidedata"]
-            .filter { filterChain.contains("\($0)=") || filterChain.contains("\($0)@") }
+        let audioFilters = argument("-af", in: args) ?? ""
+        let required = [
+            "zscale", "setparams", "format", "lut3d", "libplacebo", "sidedata",
+            "trim", "setpts", "atrim", "asetpts"
+        ].filter {
+            filterChain.contains("\($0)=") || filterChain.contains("\($0)@")
+                || audioFilters.contains("\($0)=") || audioFilters.contains("\($0)@")
+        }
         let missing = required.filter { !capabilities.filters.contains($0) }
         if !missing.isEmpty {
             throw LumaError.toolsMissing(

@@ -33,6 +33,8 @@ public final class ConversionSession: @unchecked Sendable {
     public func execute(
         plan: EncodingPlan, tools: MediaTools, source: MediaInfo,
         overwrite: Bool = false,
+        expectedFrames: Int? = nil,
+        progressDuration: Double? = nil,
         onProgress: @escaping @Sendable (TranscodeProgress) -> Void = { _ in }
     ) async throws -> URL {
         let fm = FileManager.default
@@ -49,7 +51,7 @@ public final class ConversionSession: @unchecked Sendable {
         if isCancelled() { throw LumaError.cancelled }
         try await MediaRequirements.check(tools: tools, plan: plan)
         if isCancelled() { throw LumaError.cancelled }
-        try await run(plan: plan, duration: source.duration, onProgress: onProgress)
+        try await run(plan: plan, duration: progressDuration ?? source.duration, onProgress: onProgress)
         if isCancelled() { throw LumaError.cancelled }
         guard fm.fileExists(atPath: plan.temporary.path) else {
             throw LumaError.validationFailed("Encoder produced no output file.")
@@ -60,6 +62,13 @@ public final class ConversionSession: @unchecked Sendable {
         }
         let output = try await MediaProbe.inspect(tools: tools, url: plan.temporary)
         try OutputVerifier.verify(source: source, encoded: output, plan: plan)
+        // Full decode is deliberate for trimmed output. The exact display frame
+        // count is checked before replacing the destination, never guessed by FPS.
+        if let expectedFrames {
+            try await FrameOutputVerifier.verify(
+                tools: tools, encoded: plan.temporary, expectedFrames: expectedFrames
+            )
+        }
         if isCancelled() { throw LumaError.cancelled }
 
         // Publish only after complete output verification, preserving the original on error.
