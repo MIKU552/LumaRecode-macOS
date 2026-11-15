@@ -82,16 +82,41 @@ public enum CommandCapture {
             let group = DispatchGroup()
             let out = Mutex(Data())
             let err = Mutex(Data())
+            let overflow = Mutex(false)
             group.enter()
             DispatchQueue.global().async {
-                let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                out.withLock { $0 = Data(data.prefix(limit + 1)) }
+                let file = stdout.fileHandleForReading
+                // ffprobe's frame index may be huge: never read the entire
+                // subprocess stream before applying the caller's byte cap.
+                while true {
+                    let chunk = file.readData(ofLength: 32 * 1024)
+                    if chunk.isEmpty { break }
+                    let tooLarge = out.withLock { buffer -> Bool in
+                        let remaining = max(0, limit - buffer.count)
+                        buffer.append(chunk.prefix(remaining))
+                        return chunk.count > remaining
+                    }
+                    if tooLarge {
+                        overflow.withLock { $0 = true }
+                        if process.isRunning { process.terminate() }
+                        break
+                    }
+                }
                 group.leave()
             }
             group.enter()
             DispatchQueue.global().async {
-                let data = stderr.fileHandleForReading.readDataToEndOfFile()
-                err.withLock { $0 = Data(data.suffix(64 * 1024)) }
+                let file = stderr.fileHandleForReading
+                while true {
+                    let chunk = file.readData(ofLength: 32 * 1024)
+                    if chunk.isEmpty { break }
+                    err.withLock { buffer in
+                        buffer.append(chunk)
+                        if buffer.count > 64 * 1024 {
+                            buffer.removeFirst(buffer.count - 64 * 1024)
+                        }
+                    }
+                }
                 group.leave()
             }
             let watchdog = DispatchWorkItem {
@@ -103,7 +128,9 @@ public enum CommandCapture {
             group.wait()
             let stdoutData = out.withLock { $0 }
             let stderrData = err.withLock { $0 }
-            if stdoutData.count > limit { throw LumaError.processFailed("Command output exceeded safety limit.") }
+            if overflow.withLock({ $0 }) {
+                throw LumaError.processFailed("Command output exceeded safety limit.")
+            }
             guard process.terminationStatus == 0 else {
                 throw LumaError.processFailed(String(data: stderrData, encoding: .utf8) ?? "Command failed.")
             }
