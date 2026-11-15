@@ -42,13 +42,17 @@ jobs:
           if [ -d /Applications/Xcode_27.2.app/Contents/Developer ]; then
             echo "DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer" >> "$GITHUB_ENV"
           fi
-      - name: Install native macOS FFmpeg
+      - name: Install full native macOS FFmpeg and require zscale
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
-            brew install ffmpeg
-          fi
+          brew install ffmpeg-full
+          FULL_BIN="$(brew --prefix ffmpeg-full)/bin"
+          echo "$FULL_BIN" >> "$GITHUB_PATH"
+          export PATH="$FULL_BIN:$PATH"
+          command -v ffmpeg
           ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
           ffmpeg -hide_banner -encoders | grep -E 'libx264|libx265'
+          ffmpeg -hide_banner -filters | grep -E '[[:space:]]zscale[[:space:]]'
       - name: Build Swift CLI
         run: swift build --package-path macOS/Packages/LumaCore --configuration release --product lumarecode
       - name: Probe, plan, convert, and verify synthetic SDR video

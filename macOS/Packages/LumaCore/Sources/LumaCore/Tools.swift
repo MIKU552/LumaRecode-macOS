@@ -32,7 +32,13 @@ public struct MediaTools: Sendable {
         }
         let standardPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
         let envPaths = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
-        for directory in envPaths + standardPaths {
+        // Homebrew's ffmpeg-full is keg-only; prefer its complete zscale
+        // pipeline while honoring explicit user-configured paths.
+        let fullPaths = [
+            "/opt/homebrew/opt/ffmpeg-full/bin",
+            "/usr/local/opt/ffmpeg-full/bin"
+        ]
+        for directory in fullPaths + envPaths + standardPaths {
             let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name)
             if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
         }
