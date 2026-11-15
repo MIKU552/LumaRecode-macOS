@@ -50,6 +50,12 @@ public enum EncodingPlanner {
             throw LumaError.invalidInput("Input and output must not be the same file.")
         }
         let resolved = try VideoOutputPolicy.resolve(media, selection: selection)
+        guard !media.staticHDRMetadataPresent else {
+            throw LumaError.unsupported(
+                "Mastering Display / MaxCLL preservation is not yet implemented in the macOS encoder. "
+                + "This source is blocked until static HDR metadata can be carried and verified."
+            )
+        }
         guard media.bitDepth <= 12 else {
             throw LumaError.unsupported(
                 "Sources above 12-bit need the source-specific pipeline or explicit precision policy."
@@ -86,7 +92,7 @@ public enum EncodingPlanner {
             "-hide_banner", "-nostdin", "-y", "-xerror",
             "-loglevel", "error", "-nostats", "-progress", "pipe:1",
             "-i", media.url.path,
-            "-map", "0:v:0", "-map", "0:a?", "-map_metadata", "0",
+            "-map", "0:\(media.videoStreamIndex)", "-map", "0:a?", "-map_metadata", "0",
             "-map_chapters", "0", "-sn", "-dn"
         ]
         var filters = [sourceFrameTags(media, sourceRange: resolved.sourceRange)]

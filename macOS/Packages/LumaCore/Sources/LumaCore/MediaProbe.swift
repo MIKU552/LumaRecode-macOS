@@ -42,7 +42,7 @@ public enum MediaProbe {
     public static func parse(_ data: Data, url: URL) throws -> MediaInfo {
         guard let doc = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let streams = doc["streams"] as? [[String: Any]],
-              let (_, video) = mediaStream(streams) else {
+              let (offset, video) = mediaStream(streams) else {
             throw LumaError.invalidInput("No playable video stream was found.")
         }
         let audio = streams.filter { string($0, "codec_type") == "audio" }
@@ -89,6 +89,15 @@ public enum MediaProbe {
         let evidence = (streamSideData + frameSideData)
             .map { string($0, "side_data_type") }.joined(separator: " ")
         let codecTag = string(video, "codec_tag_string").lowercased()
+        let metadataNames = (streamSideData + frameSideData)
+            .map { string($0, "side_data_type") }
+        let hasStaticMetadata = metadataNames.contains("Mastering display metadata")
+            || metadataNames.contains("Content light level metadata")
+        let display = streamSideData.first {
+            string($0, "side_data_type") == "Display Matrix"
+        }
+        let displayRotation = number(display.map { string($0, "rotation") } ?? "")
+        let tagRotation = number(string(tags, "rotate"))
         let dynamicHDR = evidence.localizedCaseInsensitiveContains("DOVI")
             || evidence.localizedCaseInsensitiveContains("Dolby Vision")
             || evidence.localizedCaseInsensitiveContains("HDR10+")
@@ -105,7 +114,11 @@ public enum MediaProbe {
             primaries: primaries, transfer: transfer, matrix: matrix,
             colorRange: range, audioCodecs: audio,
             sourceColor: color, dynamicHDR: dynamicHDR,
-            dynamicHDRDescription: dynamicHDR ? evidence : nil
+            dynamicHDRDescription: dynamicHDR ? evidence : nil,
+            videoStreamIndex: video["index"] == nil ? offset : int(video, "index"),
+            codecTag: codecTag,
+            displayRotation: display == nil ? tagRotation : displayRotation,
+            staticHDRMetadataPresent: hasStaticMetadata
         )
     }
 
