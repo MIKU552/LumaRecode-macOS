@@ -30,3 +30,7 @@ Native: `HDRStaticMetadata.swift`, `MediaProbe.swift`, `EncodingPlanner.swift`, 
 ## Full source HDR safety audit
 
 Windows provenance: `MediaProbe.cs` collects stream and early frame side data; `Transcoder.cs VerifyAsync` checks static HDR mastering/light metadata and dynamic HDR. Native macOS adds `HDRSideDataSweep` as a conservative extra preflight over all decoded HEVC/AV1 frames, rejecting later HDR10+/Dolby Vision evidence, unreported static SEI and inconsistent mastering/MaxCLL values. The compact ffprobe side-data stream is bounded and cancellable. This is not bitstream-level RPU preservation; DRM/proprietary metadata hidden by the decoder may still escape detection.
+
+## Native Apple Live Photo / original Google Motion Photo
+
+Original Windows `Core/MotionPhoto.cs` writes Google Motion Photo 1.0 as JPEG APP1 XMP plus appended MP4. Apple Live Photo requires an entirely different native format: JPEG Apple MakerNote field 17, identical QuickTime Content Identifier in the MOV, and a timed `mdta/com.apple.quicktime.still-image-time` track. A single Photos creation request can pair `.photo` and `.pairedVideo`, only after explicit user authorization. New macOS CI checks ImageIO/AVFoundation metadata and in-memory PHLivePhoto recognition using SDR video with H.264 B frames and AAC. HDR HEIC/Gain Map Live Photos remain unported. FFmpeg is external and user-provided.

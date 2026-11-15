@@ -11,7 +11,7 @@
 | SDR HEIC/JPEG/PNG | 初版 | 图片方向、颜色与元数据检查 |
 | Apple HDR HEIC | 10-bit PQ 初版（实验性、待 CI） | AVAssetReader P010 → Core Image PQ → HEIF10；HLG、色度与 EDR 实机验证待完成 |
 | Gain Map HEIC | 未实现 | SDR base + HDR gain map、Photos 原生显示验证 |
-| Apple Live Photo | 未实现 | paired video / still metadata、PhotoKit 导入检验 |
+| Apple Live Photo | SDR JPEG + MOV 初版，待 CI 验证 | 同 UUID、still-image-time 轨、PHLivePhoto 预览、明确授权的照片库导入；HDR/HEIC 未实现 |
 | Dolby Vision / HDR10+ | 未实现 | 原始动态元数据跨帧保留、无降级 |
 | HDR10 静态 Mastering Display / MaxCLL | 软件 PQ → HEVC 初版（待专项 CI） | FFprobe SI 有理数 → x265 SEI 标度，编码后逐字段对比及不完整源拒绝；AV1/VT 不开放 |
 | Log LUT | HLG 转换初版（实验性，待 CI） | 5 份原版 LUT 哈希一致，ffprobe HLG 色彩验证；真实相机色彩误差及 SDR 色调映射尚待验收 |
@@ -84,3 +84,7 @@ Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus �
 `HDRSideDataSweep.swift` 对 HEVC / AV1 在正式编码前运行一次完整 `ffprobe -show_frames`，使用 `-show_entries frame=:frame_side_data=...` 和 compact 行输出以限制内存占用。新增单元测试针对第五帧才出现 HDR10+、后续首次出现静态 HDR、母版色度/内容亮度被篡改、取消与不可解码输入。Mac App 会显示审计、能力检查、编码和验收阶段。
 
 此审计仅覆盖 FFmpeg 解码器**公开**的侧数据，不保证所有 Dolby Vision RPU 均会被识别，不能等同于动态 HDR 无损保留。完整的动态 HDR 位流审计及写回仍在待实现列表。
+
+## Apple Live Photo 配对（2026-11-15）
+
+不同于 Windows `Core/MotionPhoto.cs` 的 Google JPEG+MP4 容器，新版 `LivePhotoPairing.swift` 和 `AppleLivePhotoExporter.swift` 使用 Apple MakerNote 17、QuickTime Content Identifier、still-image-time 定时轨构建配对。AVAssetExportSession 生成三秒以内 MOV，AVAssetWriter 按解码时间交织 B 帧/AAC 样本。PhotoKit 的照片库导入为单独授权的动作。新增真实 FFmpeg 样片 + PHLivePhoto.request 的集成验证。尚未宣布 HDR HEIC、Photos 交互验收及 iPhone 壁纸兼容性完成。
