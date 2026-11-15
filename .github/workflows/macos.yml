@@ -74,6 +74,9 @@ jobs:
           grep -q '"event":"done"' "$WORK/events.jsonl"
           echo "Software HEVC encode, audio preservation, output verification, and CLI JSON events passed."
 
+      - name: Verify multitrack audio, range conversion, and fail-closed options
+        run: bash macOS/ci/test-media-parity.sh
+
       - name: Verify PQ video to native HEIC10 pipeline
         env:
           LUMA_PQ_VIDEO_CI: "1"
