@@ -98,6 +98,8 @@ public enum MediaProbe {
         }
         let displayRotation = number(display.map { string($0, "rotation") } ?? "")
         let tagRotation = number(string(tags, "rotate"))
+        let interlaced = ["tt", "bb", "tb", "bt"].contains(string(video, "field_order"))
+            || firstFrames.contains { int($0, "interlaced_frame") == 1 }
         let dynamicHDR = evidence.localizedCaseInsensitiveContains("DOVI")
             || evidence.localizedCaseInsensitiveContains("Dolby Vision")
             || evidence.localizedCaseInsensitiveContains("HDR10+")
@@ -118,7 +120,9 @@ public enum MediaProbe {
             videoStreamIndex: video["index"] == nil ? offset : int(video, "index"),
             codecTag: codecTag,
             displayRotation: display == nil ? tagRotation : displayRotation,
-            staticHDRMetadataPresent: hasStaticMetadata
+            staticHDRMetadataPresent: hasStaticMetadata,
+            timeBase: string(video, "time_base"),
+            isInterlaced: interlaced
         )
     }
 
