@@ -56,11 +56,33 @@ public enum AppleHDRPhotoExporter {
         }
         try await Task.detached(priority: .userInitiated) {
             let asset = AVURLAsset(url: media.url)
-            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            let tracks: [AVAssetTrack]
+            do {
+                tracks = try await asset.loadTracks(withMediaType: .video)
+            } catch {
+                throw LumaError.processFailed(
+                    "AVFoundation could not inspect the HEVC video track: \(error.localizedDescription)"
+                )
+            }
+            guard let track = tracks.first else {
                 throw LumaError.invalidInput("AVFoundation cannot find a video track.")
             }
-            let transform = try await track.load(.preferredTransform)
-            let reader = try AVAssetReader(asset: asset)
+            let transform: CGAffineTransform
+            do {
+                transform = try await track.load(.preferredTransform)
+            } catch {
+                throw LumaError.processFailed(
+                    "AVFoundation could not load video orientation: \(error.localizedDescription)"
+                )
+            }
+            let reader: AVAssetReader
+            do {
+                reader = try AVAssetReader(asset: asset)
+            } catch {
+                throw LumaError.processFailed(
+                    "AVAssetReader initialization failed: \(error.localizedDescription)"
+                )
+            }
             // Ask for 10-bit Y'CbCr, not BGRA/8-bit, to avoid collapsing HDR range.
             let fullRange = ["pc", "full", "jpeg"].contains(media.colorRange)
             let format: OSType = fullRange
@@ -106,7 +128,13 @@ public enum AppleHDRPhotoExporter {
                 let temporary = destination.deletingLastPathComponent()
                     .appendingPathComponent(".luma-hdr-\(UUID().uuidString).heic")
                 defer { try? FileManager.default.removeItem(at: temporary) }
-                try writePQ(normalized, to: temporary)
+                do {
+                    try writePQ(normalized, to: temporary)
+                } catch {
+                    throw LumaError.processFailed(
+                        "Core Image HEIF10 encoding failed after 10-bit decoding: \(error.localizedDescription)"
+                    )
+                }
                 guard !FileManager.default.fileExists(atPath: destination.path) else {
                     throw LumaError.invalidInput("Destination was created by another process.")
                 }
