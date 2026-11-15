@@ -2,10 +2,46 @@ import CoreGraphics
 import CoreImage
 import Foundation
 import ImageIO
+import LumaCore
 import XCTest
 @testable import LumaPhotos
 
 final class AppleHDRPhotoTests: XCTestCase {
+    func testExportsPQFrameFromNative10BitVideo() async throws {
+        guard ProcessInfo.processInfo.environment["LUMA_PQ_VIDEO_CI"] == "1" else {
+            throw XCTSkip("Real HDR media integration runs in the FFmpeg smoke-test job.")
+        }
+        let tools = try MediaTools.resolve()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("luma-hdr-integration-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let input = directory.appendingPathComponent("pq-source.mp4")
+        let photo = directory.appendingPathComponent("pq-frame.heic")
+        let output = try await CommandCapture.run(tools.ffmpeg, [
+            "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc2=duration=0.8:size=160x90:rate=24",
+            "-vf", "format=yuv420p10le",
+            "-c:v", "libx265", "-preset", "ultrafast",
+            "-x265-params", "log-level=error",
+            "-pix_fmt", "yuv420p10le",
+            "-color_primaries", "bt2020", "-color_trc", "smpte2084",
+            "-colorspace", "bt2020nc",
+            "-an", input.path
+        ], timeout: 90)
+        XCTAssertEqual(output.code, 0)
+        let media = try await MediaProbe.inspect(tools: tools, url: input)
+        XCTAssertEqual(media.sourceColor, .pq)
+        XCTAssertEqual(media.bitDepth, 10)
+        XCTAssertEqual(media.primaries, "bt2020")
+        try await AppleHDRPhotoExporter.exportPQ(from: media, at: 0.25, to: photo)
+        let result = try XCTUnwrap(CGImageSourceCreateWithURL(photo as CFURL, nil))
+        XCTAssertEqual(CGImageSourceGetCount(result), 1)
+        let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(result, 0, nil) as? [CFString: Any])
+        XCTAssertEqual(props[kCGImagePropertyPixelWidth] as? Int, 160)
+        XCTAssertEqual(props[kCGImagePropertyPixelHeight] as? Int, 90)
+    }
+
     func testWritesNative10BitHEIC() throws {
         let path = FileManager.default.temporaryDirectory
             .appendingPathComponent("luma-pq-\(UUID().uuidString).heic")
