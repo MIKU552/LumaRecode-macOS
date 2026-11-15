@@ -84,7 +84,7 @@ struct VideoWorkspace: View {
             }
             .padding(16)
         }
-        .onChange(of: model.sourceURL) { newURL in
+        .onChange(of: model.sourceURL) { _, newURL in
             player.replaceCurrentItem(with: newURL.map { AVPlayerItem(url: $0) })
         }
     }
