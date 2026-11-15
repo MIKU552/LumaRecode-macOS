@@ -23,7 +23,9 @@ final class AppleHDRPhotoTests: XCTestCase {
             "-f", "lavfi", "-i", "testsrc2=duration=0.8:size=160x90:rate=24",
             "-vf", "format=yuv420p10le",
             "-c:v", "libx265", "-preset", "ultrafast",
-            "-x265-params", "log-level=error",
+            // x265 must write HDR VUI into the HEVC bitstream, not just
+            // the FFmpeg muxer-level color flags.
+            "-x265-params", "log-level=error:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc",
             "-pix_fmt", "yuv420p10le",
             "-color_primaries", "bt2020", "-color_trc", "smpte2084",
             "-colorspace", "bt2020nc",
@@ -31,9 +33,14 @@ final class AppleHDRPhotoTests: XCTestCase {
         ], timeout: 90)
         XCTAssertEqual(output.code, 0)
         let media = try await MediaProbe.inspect(tools: tools, url: input)
-        XCTAssertEqual(media.sourceColor, .pq)
-        XCTAssertEqual(media.bitDepth, 10)
-        XCTAssertEqual(media.primaries, "bt2020")
+        XCTAssertEqual(media.sourceColor, .pq, "Test source HEVC VUI must declare PQ.")
+        XCTAssertEqual(media.bitDepth, 10, "Test source must be 10-bit.")
+        XCTAssertEqual(media.primaries, "bt2020", "Test source HEVC VUI must declare BT.2020.")
+        XCTAssertEqual(media.matrix, "bt2020nc", "Test source must declare BT.2020 NCL.")
+        guard media.sourceColor == .pq, media.primaries == "bt2020",
+              media.matrix == "bt2020nc", media.bitDepth == 10 else {
+            return // Source preconditions failed; do not misattribute to the Apple HEIC encoder.
+        }
         try await AppleHDRPhotoExporter.exportPQ(from: media, at: 0.25, to: photo)
         let result = try XCTUnwrap(CGImageSourceCreateWithURL(photo as CFURL, nil))
         XCTAssertEqual(CGImageSourceGetCount(result), 1)

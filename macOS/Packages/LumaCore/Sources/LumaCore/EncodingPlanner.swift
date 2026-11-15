@@ -43,14 +43,30 @@ public enum EncodingPlanner {
                  "-map", "0:v:0", "-map", "0:a?", "-map_metadata", "0",
                  "-map_chapters", "0", "-sn", "-dn"]
         let hdr = media.sourceColor.isHDR
+        if hdr && (media.primaries != "bt2020" || media.matrix != "bt2020nc") {
+            throw LumaError.unsupported(
+                "HDR input colorimetry is incomplete or unexpected. "
+                + "Refusing to relabel the pixels as BT.2020 without a verified color conversion."
+            )
+        }
         let depth = media.bitDepth >= 10 || hdr ? 10 : 8
         if selection.purpose == .archive {
             let encoder: String
             switch selection.codec {
             case .hevc:
                 encoder = "libx265"
+                // Match the Windows software preset. x265 writes color
+                // signalling in its HEVC VUI, so muxer flags alone are not enough.
+                var x265 = "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1"
+                if hdr {
+                    let transfer = media.sourceColor == .hlg ? "arib-std-b67" : "smpte2084"
+                    x265 += ":colorprim=bt2020:transfer=\(transfer):colormatrix=bt2020nc"
+                } else if media.primaries == "bt709"
+                    && media.transfer == "bt709" && media.matrix == "bt709" {
+                    x265 += ":colorprim=bt709:transfer=bt709:colormatrix=bt709"
+                }
                 a += ["-preset", "medium", "-crf", "23",
-                      "-x265-params", "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1"]
+                      "-x265-params", x265]
             case .avc:
                 encoder = "libx264"
                 a += ["-preset", "medium", "-crf", "21",
