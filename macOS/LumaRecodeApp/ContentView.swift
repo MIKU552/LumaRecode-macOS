@@ -55,17 +55,20 @@ struct ContentView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             switch result {
             case .success(let url):
-                model.open(url)
-                model.area = .video
+                self.model.open(url)
+                self.model.area = .video
             case .failure(let error):
-                model.present(error)
+                self.model.present(error)
             }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
+            // Capture the reference, not the mutable @Bindable projection,
+            // across NSItemProvider's completion callback.
+            let workspace = self.model
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 guard let url else { return }
-                Task { @MainActor in model.open(url) }
+                Task { @MainActor in workspace.open(url) }
             }
             return true
         }
