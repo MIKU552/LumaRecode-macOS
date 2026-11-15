@@ -39,3 +39,7 @@
 ## 2026-11-15 Swift 6.4 迁移
 
 已检测 Xcode 27.1 上的 Apple Swift 6.4。核心 Package 与 SwiftUI App 正在从 Swift 5 语言模式迁移至 Swift 6 严格并发语言模式，使用 `Synchronization.Mutex` 防止输出读取竞争。**待 CI 确认编译通过**。
+
+## Xcode 27.2 / ffprobe 增强
+
+CI 现在优先选择已安装的 **Xcode 27.2**（Swift 6.4.2），在镜像未安装时回退到 Xcode 27 默认版本。增加 ProRes RAW `prores_raw` 检测和有限首帧 HDR10+ / Dolby Vision 元数据辅助检测；**有限首帧检测不保证全视频动态元数据安全**，后续仍需位流级完整校验。

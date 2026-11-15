@@ -16,6 +16,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest stable Xcode 27
+        run: |
+          if [ -d /Applications/Xcode_27.2.app/Contents/Developer ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer" >> "$GITHUB_ENV"
+          fi
       - name: Confirm macOS 27 toolchain
         run: |
           sw_vers
@@ -32,6 +37,11 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest stable Xcode 27
+        run: |
+          if [ -d /Applications/Xcode_27.2.app/Contents/Developer ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer" >> "$GITHUB_ENV"
+          fi
       - name: Install native macOS FFmpeg
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
@@ -71,6 +81,11 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Select newest stable Xcode 27
+        run: |
+          if [ -d /Applications/Xcode_27.2.app/Contents/Developer ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer" >> "$GITHUB_ENV"
+          fi
       - name: Prepare XcodeGen
         run: |
           if ! command -v xcodegen >/dev/null 2>&1; then

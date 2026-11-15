@@ -62,6 +62,24 @@ final class PlannerTests: XCTestCase {
         )
         XCTAssertEqual(url.lastPathComponent, "source_SDR_hevc_archive.mkv")
     }
+    func testProResRAWCodecIsDetected() throws {
+        let json = """
+        {"format":{"duration":"1"},"streams":[{"codec_type":"video","codec_name":"prores_raw",
+        "width":1920,"height":1080,"pix_fmt":"bayer_rggb16le","avg_frame_rate":"24/1"}]}
+        """
+        let info = try MediaProbe.parse(Data(json.utf8), url: URL(fileURLWithPath: "/tmp/raw.mov"))
+        XCTAssertEqual(info.sourceColor, .raw)
+    }
+    func testFrameSideDataDetectsDynamicHDR() throws {
+        let json = """
+        {"format":{"duration":"1"},"streams":[{"codec_type":"video","codec_name":"hevc",
+         "width":1920,"height":1080,"color_transfer":"smpte2084","pix_fmt":"yuv420p10le"}],
+         "frames":[{"side_data_list":[{"side_data_type":"HDR Dynamic Metadata SMPTE2094-40 (HDR10+)"}]}]}
+        """
+        let info = try MediaProbe.parse(Data(json.utf8), url: URL(fileURLWithPath: "/tmp/hdr.mp4"))
+        XCTAssertTrue(info.dynamicHDR)
+        XCTAssertEqual(info.sourceColor, .pq)
+    }
     func testProbeParsing() throws {
         let json = """
         {"format":{"duration":"4.50"},"streams":[
