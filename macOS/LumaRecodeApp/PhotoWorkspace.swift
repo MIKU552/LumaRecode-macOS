@@ -25,7 +25,7 @@ struct PhotoWorkspace: View {
                 if media.sourceColor == .sdr {
                     Form {
                         HStack {
-                            Slider(value: $seconds, in: 0...max(0.001, media.duration), step: 0.1)
+                            Slider(value: $seconds, in: 0...max(0.001, media.duration - 0.001), step: 0.1)
                             Text(String(format: "%.1f 秒", seconds))
                                 .monospacedDigit().frame(width: 100)
                         }
