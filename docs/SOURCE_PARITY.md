@@ -21,3 +21,8 @@ Every new ported behavior should cite a source file, preserve the relevant confi
 - Limit exposure to archive software HEVC/AV1 and 10-bit+ Log→HLG until end-to-end CI + physical camera samples prove wider support. No automatic profile guesses from camera model or file extension. No unvalidated Log→SDR/Vulkan tone mapping.
 
 Camera LUT compliance: Pocket 3 uses OpenOSV's Apache-2.0 resource with verbatim LICENSE/NOTICE, not the MIT license used by four project-generated tables. See docs/THIRD_PARTY.md and the application resource bundle.
+
+## HDR10 static SEI parity
+
+Reference: Windows `Core/Transcoder.cs:HdrMetadata` (source SI rationals -> x265 integer units) and `VerifyAsync` (target SEI quantization tolerance).
+Native: `HDRStaticMetadata.swift`, `MediaProbe.swift`, `EncodingPlanner.swift`, `OutputVerifier.swift`. Mastering xy ×50000; luminance ×10000; content light fields exact. Software HEVC PQ path only, all untested paths fail closed. CI: `macOS/ci/test-static-hdr10.sh` creates x265 HDR10 with known 1000/400 nits, verifies real output SEI and rejects AV1.

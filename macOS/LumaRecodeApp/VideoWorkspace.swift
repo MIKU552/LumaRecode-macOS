@@ -57,6 +57,17 @@ struct VideoWorkspace: View {
                             .foregroundStyle(.orange)
                             .font(.callout)
                     }
+                    if media.staticHDRMetadataPresent {
+                        if media.hdrStaticMetadata == nil {
+                            Label("此素材的 HDR10 静态元数据不完整，已阻止不安全编码。", systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                                .font(.callout)
+                        } else {
+                            Label("包含 HDR10 静态元数据：仅软件 HEVC 归档支持保留及逐字段验证。", systemImage: "checkmark.shield")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     if model.selection.logProfile != nil {
                         Label("相机 Log → HLG：使用原版 LUT，软件编码（实验性）。", systemImage: "camera.filters")
                             .foregroundStyle(.secondary)

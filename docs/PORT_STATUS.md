@@ -13,6 +13,7 @@
 | Gain Map HEIC | 未实现 | SDR base + HDR gain map、Photos 原生显示验证 |
 | Apple Live Photo | 未实现 | paired video / still metadata、PhotoKit 导入检验 |
 | Dolby Vision / HDR10+ | 未实现 | 原始动态元数据跨帧保留、无降级 |
+| HDR10 静态 Mastering Display / MaxCLL | 软件 PQ → HEVC 初版（待专项 CI） | FFprobe SI 有理数 → x265 SEI 标度，编码后逐字段对比及不完整源拒绝；AV1/VT 不开放 |
 | Log LUT | HLG 转换初版（实验性，待 CI） | 5 份原版 LUT 哈希一致，ffprobe HLG 色彩验证；真实相机色彩误差及 SDR 色调映射尚待验收 |
 | ProRes RAW | 未实现 | Bayer、相机逐帧矩阵、白平衡、方向和 RAW 解码 |
 | 精确帧裁剪 | 初版 | B 帧实际裁剪已测试，VFR、负 PTS 与音频时间基对齐继续验收 |
@@ -73,3 +74,7 @@ Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus �
 ## 原版五套 Log LUT 已原样引入（2026-11-15）
 
 上游为 `MIKU552/LumaRecode@85b5bd2674d7071e2de5c8785334c50524b9a15b` 的五份 `Assets/*.cube`。通过 GitHub Actions 逐份下载并对比 Git blob SHA；在同一 GitHub 仓库中提交完全相同的资源对象。Mac 版的 Swift `CameraLogPipeline` 根据原版的矩阵与 Full/Limited 默认值，构建 `zscale → gbrpf32le → lut3d(tetrahedral) → setparams(HLG) → zscale(2020_ncl, error_diffusion)`。新 `EncodeSelection.logProfile` 代表显式转换请求，支持自动识别精确相机 metadata 或经用户明确确认的 Log 输入，仅软件 HEVC/AV1、至少 10 bit。输出验证按 HLG 目标而不是源 Log 色彩标签进行。新增 Swift 测试与真实 FFmpeg 10-bit Log → HLG 集成测试，**待新 Actions 完整验证**。暂不宣称 Log → SDR、RAW/动态 HDR、相机实拍色准或 macOS EDR 预览已验收。
+
+## HDR10 静态元数据实现（2026-11-15）
+
+新增 `HDRStaticMetadata.swift`，严格解析 Mastering Display（8 个 xy 色度、最大/最小亮度）和 MaxCLL/MaxFALL。遵循 Windows `Transcoder.HdrMetadata` 的 x265 整数单位：色度 × 50000，亮度 × 10000；只对源 BT.2020/PQ 且软件 HEVC 归档启用。编码后 `OutputVerifier` 在目标 HEVC 允许的一步量化容差内比较各字段，验证通过前不发布目标文件。缺字段、不同帧冲突、值溢出、静态 HDR 的 AV1 / VideoToolbox 路径均被拒绝。新增 Swift 单元测试与真实 FFmpeg CI 合成 HDR10 元数据保留测试；实际验收仍以最新 Actions 结果为准。

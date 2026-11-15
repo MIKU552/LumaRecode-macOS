@@ -17,7 +17,7 @@
 
 ## 尚未移植（会拒绝不安全的处理）
 
-- Dolby Vision / HDR10+ 的逐帧元数据保留与转换。
+- Dolby Vision / HDR10+ 的逐帧元数据保留与转换；HDR10 静态元数据的 AV1 / VideoToolbox 保留仍待验证。
 - Log → SDR（原版 BT.2390 / libplacebo 色调映射）及相机 Log LUT 的实机色彩一致性验收。
 - ProRes RAW 显影。
 - 高级逐帧裁剪边界（VFR、负 PTS、音频起始偏移）及多帧预览渲染；B 帧/PTS 初版已实现。
@@ -106,3 +106,9 @@ lumarecode convert camera.mov --purpose archive --codec hevc \\
 ```
 
 `--interpret-log` 仅用于相机标签缺失或错误时手动明确确认输入为 Log；元数据匹配时不需要它。此功能只处理相机 Log → **BT.2100 HLG**，并以原版软件归档参数编码。不会将设备型号或文件名猜成特定曲线，也不会将没有通过色彩校验的输出发布。Log → SDR、RAW、动态 HDR 仍不支持。真实 Log 相机样本与 Apple EDR 显示仍需实测。
+
+## HDR10 Mastering Display / MaxCLL 保留（初版）
+
+基于 Windows `Core/Transcoder.cs` 的 `HdrMetadata` 与 `VerifyAsync`，Swift `HDRStaticMetadata` 从 FFprobe 的流/解码帧侧数据读取母版色度、最大/最小亮度与 MaxCLL/MaxFALL。软件 HEVC PQ 归档通过 x265 写入 `master-display`、`max-cll`、`hdr10=1`、`hdr10-opt=1`、`repeat-headers=1`，发布前再读取并按 HEVC SEI 量化步长逐字段验证。**首版仅对被探测到静态元数据的 BT.2020 PQ 素材开放软件 HEVC 归档；不支持静态元数据的 AV1、VideoToolbox 等尚未实测的组合。** 非完整、冲突或超出 SEI 范围的元数据会被拒绝。动态 HDR（Dolby Vision/HDR10+）仍不支持。首帧有限探测不保证识别整个视频中后期出现的动态元数据，仍需后续全片位流检查。
+
+真实 FFmpeg/x265 合成样片的 Mastering Display 与 MaxCLL/MaxFALL 在编码前后已验证一致；macOS 专项 CI 以 `test-static-hdr10.sh` 的实际运行结果为准。

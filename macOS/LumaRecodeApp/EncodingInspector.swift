@@ -172,7 +172,30 @@ struct EncodingInspector: View {
                     LabeledContent("传递函数", value: info.transfer.isEmpty ? "未知" : info.transfer)
                     LabeledContent("色域", value: info.primaries.isEmpty ? "未知" : info.primaries)
                     LabeledContent("位深", value: "\(info.bitDepth)-bit")
-                    Text("支持原版相机 LUT 的 Log → HLG 软件归档；RAW、动态 HDR 和 Log → SDR 仍需继续移植。")
+                    if info.staticHDRMetadataPresent {
+                        if let metadata = info.hdrStaticMetadata {
+                            LabeledContent("HDR10 静态元数据", value: "已解析")
+                            if let mastering = metadata.masteringDisplay,
+                               let maximum = mastering["max_luminance"] {
+                                LabeledContent(
+                                    "Mastering 峰值",
+                                    value: "\(maximum.formatted(.number.precision(.fractionLength(0...3)))) cd/m²"
+                                )
+                            }
+                            if let content = metadata.contentLight {
+                                LabeledContent(
+                                    "MaxCLL / MaxFALL",
+                                    value: "\(content["max_content"] ?? 0) / \(content["max_average"] ?? 0) nit"
+                                )
+                            }
+                            Text("仅 PQ 素材的软件 HEVC 归档可保留并核验这些字段。")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            Label("HDR10 静态元数据缺失字段或不一致，禁止无损失保证的转码。", systemImage: "exclamationmark.triangle")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    }
+                    Text("支持原版相机 LUT 的 Log → HLG 软件归档和 PQ 静态 HDR10 的软件 HEVC 保留；RAW、动态 HDR 和 Log → SDR 仍需继续移植。")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text("选择视频后显示格式信息。").foregroundStyle(.secondary)
