@@ -1,0 +1,84 @@
+name: One-Time Codex Co-author History Rewrite
+
+on:
+  push:
+    branches:
+      - chore/codex-history-bootstrap-2026-11-15
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Rebuild all commits including root with identical source trees
+        env:
+          EXPECTED_OLD_HEAD: f2c5c2eeb10073ea6d9a3b0f39a47778770a2f66
+          EXPECTED_COMMIT_COUNT: "42"
+          READY_BRANCH: chore/codex-history-rewrite-ready-2026-11-15
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          old_head="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "$old_head" != "$EXPECTED_OLD_HEAD" ]]; then
+            echo "main moved; refusing to rewrite." >&2
+            exit 1
+          fi
+          count="$(git rev-list --count "$old_head")"
+          if [[ "$count" != "$EXPECTED_COMMIT_COUNT" ]]; then
+            echo "Expected $EXPECTED_COMMIT_COUNT commits, got $count" >&2
+            exit 1
+          fi
+          parent=""
+          while read -r old; do
+            tree="$(git rev-parse "$old^{tree}")"
+            message="$(git show -s --format=%B "$old")"
+            if grep -Fqi 'Co-authored-by: Codex <codex@openai.com>' <<< "$message"; then
+              echo "Unexpected pre-existing Codex trailer in $old" >&2
+              exit 1
+            fi
+            export GIT_AUTHOR_NAME="$(git show -s --format=%an "$old")"
+            export GIT_AUTHOR_EMAIL="$(git show -s --format=%ae "$old")"
+            export GIT_AUTHOR_DATE="$(git show -s --format=%aI "$old")"
+            export GIT_COMMITTER_NAME="$(git show -s --format=%cn "$old")"
+            export GIT_COMMITTER_EMAIL="$(git show -s --format=%ce "$old")"
+            export GIT_COMMITTER_DATE="$(git show -s --format=%cI "$old")"
+            set -- "$tree"
+            if [[ -n "$parent" ]]; then
+              set -- "$@" -p "$parent"
+            fi
+            next="$(printf '%s\n\nCo-authored-by: Codex <codex@openai.com>\n' "$message" |
+              git commit-tree "$@")"
+            if [[ "$(git rev-parse "$next^{tree}")" != "$tree" ]]; then
+              echo "File tree changed for $old" >&2
+              exit 1
+            fi
+            if [[ "$(git show -s --format='%an <%ae> %aI|%cn <%ce> %cI' "$old")" != \
+                  "$(git show -s --format='%an <%ae> %aI|%cn <%ce> %cI' "$next")" ]]; then
+              echo "Author/committer metadata changed for $old" >&2
+              exit 1
+            fi
+            parent="$next"
+          done < <(git rev-list --reverse "$old_head")
+          test "$(git rev-list --count "$parent")" = "$EXPECTED_COMMIT_COUNT"
+          test "$(git rev-parse "$parent^{tree}")" = "$(git rev-parse "$old_head^{tree}")"
+          test -z "$(git rev-list --parents "$parent" | awk 'NF > 2 { print; exit }')"
+          root="$(git rev-list --max-parents=0 "$parent")"
+          git show -s --format=%B "$root" | grep -Fx 'Co-authored-by: Codex <codex@openai.com>'
+          while read -r sha; do
+            git show -s --format=%B "$sha" |
+              grep -Fx 'Co-authored-by: Codex <codex@openai.com>' >/dev/null
+          done < <(git rev-list "$parent")
+          git push origin "$parent:refs/heads/$READY_BRANCH"
+          echo "Rewritten commits: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "Original HEAD: $old_head" >> "$GITHUB_STEP_SUMMARY"
+          echo "New HEAD: $parent" >> "$GITHUB_STEP_SUMMARY"
+          echo "File trees, authors, committers, and original dates preserved." >> "$GITHUB_STEP_SUMMARY"
