@@ -97,8 +97,6 @@ public final class ConversionSession: @unchecked Sendable {
                 let stderr = Pipe()
                 task.standardOutput = stdout
                 task.standardError = stderr
-                var lastSeconds = 0.0
-                var lastFPS: Double? = nil
                 let group = DispatchGroup()
                 do {
                     if self.isCancelled() { throw LumaError.cancelled }
@@ -108,6 +106,9 @@ public final class ConversionSession: @unchecked Sendable {
                     DispatchQueue.global(qos: .userInitiated).async {
                         let file = stdout.fileHandleForReading
                         var pending = Data()
+                        // These values are owned solely by the stdout reader.
+                        var lastSeconds = 0.0
+                        var lastFPS: Double? = nil
                         while true {
                             let chunk = file.availableData
                             if chunk.isEmpty { break }
