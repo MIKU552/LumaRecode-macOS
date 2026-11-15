@@ -20,6 +20,22 @@ public enum AppleLivePhotoExporter {
         to directory: URL,
         name: String
     ) async throws -> LivePhotoPair {
+        // AVAssetReader and pass-through muxing are potentially blocking.
+        // Explicitly detach the heavy media work from the SwiftUI MainActor.
+        try await Task.detached(priority: .userInitiated) {
+            try await exportDetached(
+                from: source, selectedTime: selectedTime,
+                to: directory, name: name
+            )
+        }.value
+    }
+
+    private static func exportDetached(
+        from source: MediaInfo,
+        selectedTime: Double,
+        to directory: URL,
+        name: String
+    ) async throws -> LivePhotoPair {
         guard source.sourceColor == .sdr, source.bitDepth == 8,
               !source.dynamicHDR, !source.staticHDRMetadataPresent,
               ["h264", "hevc"].contains(source.codec) else {
