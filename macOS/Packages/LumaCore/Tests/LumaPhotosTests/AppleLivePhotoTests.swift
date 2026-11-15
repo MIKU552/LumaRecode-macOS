@@ -50,9 +50,12 @@ final class AppleLivePhotoTests: XCTestCase {
             expectedStillTime: pair.stillTime
         )
         let movie = AVURLAsset(url: pair.movie)
-        XCTAssertFalse(try await movie.loadTracks(withMediaType: .video).isEmpty)
-        XCTAssertFalse(try await movie.loadTracks(withMediaType: .audio).isEmpty)
-        XCTAssertFalse(try await movie.loadTracks(withMediaType: .metadata).isEmpty)
+        let videoTracks = try await movie.loadTracks(withMediaType: .video)
+        let audioTracks = try await movie.loadTracks(withMediaType: .audio)
+        let metadataTracks = try await movie.loadTracks(withMediaType: .metadata)
+        XCTAssertFalse(videoTracks.isEmpty)
+        XCTAssertFalse(audioTracks.isEmpty)
+        XCTAssertFalse(metadataTracks.isEmpty)
         XCTAssertLessThan(pair.stillTime, 3)
 
         // The pair is only considered complete once Photos can construct the
