@@ -50,7 +50,7 @@ jobs:
           CLI="$(swift build --package-path macOS/Packages/LumaCore --configuration release --show-bin-path)/lumarecode"
           SRC="$WORK/source.mp4"
           OUT="$WORK/archive.mkv"
-          ffmpeg -hide_banner -loglevel error -f lavfi             -i 'testsrc2=duration=0.7:size=160x90:rate=24'             -f lavfi -i 'sine=frequency=440:duration=0.7'             -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac -y "$SRC"
+          ffmpeg -hide_banner -loglevel error -f lavfi             -i 'testsrc2=duration=0.7:size=160x90:rate=24'             -f lavfi -i 'sine=frequency=440:duration=0.7'             -shortest -c:v libx264 -x264-params colorprim=bt709:transfer=bt709:colormatrix=bt709 -pix_fmt yuv420p -c:a aac -y "$SRC"
           "$CLI" probe "$SRC" --json > "$WORK/probe.json"
           grep -q '"sourceColor" : "sdr"' "$WORK/probe.json" || grep -q '"sourceColor":"sdr"' "$WORK/probe.json"
           "$CLI" plan "$SRC" --codec hevc --purpose archive --output "$OUT" > "$WORK/plan.jsonl"
