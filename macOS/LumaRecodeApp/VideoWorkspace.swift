@@ -57,8 +57,12 @@ struct VideoWorkspace: View {
                             .foregroundStyle(.orange)
                             .font(.callout)
                     }
-                    if [.log, .raw, .unknown].contains(media.sourceColor) {
-                        Label("当前阶段不对未移植的 Log、RAW 或未知色彩素材进行有损近似处理。", systemImage: "info.circle")
+                    if model.selection.logProfile != nil {
+                        Label("相机 Log → HLG：使用原版 LUT，软件编码（实验性）。", systemImage: "camera.filters")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                    } else if [.log, .raw, .unknown].contains(media.sourceColor) {
+                        Label("Log 需要选定相机曲线；RAW 或未知色彩不能不经确认直接转码。", systemImage: "info.circle")
                             .foregroundStyle(.secondary)
                             .font(.callout)
                     }

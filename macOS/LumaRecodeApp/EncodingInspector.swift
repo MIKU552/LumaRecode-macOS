@@ -59,6 +59,43 @@ struct EncodingInspector: View {
                     LabeledContent("质量参考", value: model.selection.codec == .hevc ? "65" : "70")
                 }
             }
+            Section("相机 Log 色彩") {
+                Picker("色彩转换", selection: $model.selection.logProfile) {
+                    Text("原样编码（不使用 LUT）").tag(nil as CameraLogProfile?)
+                    ForEach(CameraLogProfile.allCases) { profile in
+                        Text(profile.title).tag(profile as CameraLogProfile?)
+                    }
+                }
+                .onChange(of: model.selection.logProfile) { _, profile in
+                    let workspace = self.model
+                    if profile != nil {
+                        workspace.selection.purpose = .archive
+                        if workspace.selection.codec == .avc {
+                            workspace.selection.codec = .hevc
+                        }
+                        workspace.selection.bitDepth = .automatic
+                    }
+                }
+                if let profile = model.selection.logProfile {
+                    LabeledContent("输入曲线", value: profile.title)
+                    LabeledContent("输出", value: "BT.2100 HLG · BT.2020")
+                    if let info = model.media, info.sourceColor != .log {
+                        Toggle(
+                            "明确将素材解释为相机 Log",
+                            isOn: $model.selection.interpretAsLog
+                        )
+                        Text("仅在原片未正确标记 Log 时使用。错误的输入解释会改变颜色，应用不会凭文件名或相机型号猜测。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Label("使用 Windows 原版浮点 LUT 和四面体插值。首版仅支持软件 HEVC/AV1 归档、10-bit 以上的 Log → HLG；Log → SDR 尚未移植。", systemImage: "camera.filters")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if model.media?.sourceColor == .log {
+                    Label("检测到 Log 素材，请选择与原片匹配的相机曲线。", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
             Section("格式") {
                 Picker("色度采样", selection: $model.selection.sampling) {
                     Text("自动").tag(SamplingChoice.automatic)
@@ -135,7 +172,7 @@ struct EncodingInspector: View {
                     LabeledContent("传递函数", value: info.transfer.isEmpty ? "未知" : info.transfer)
                     LabeledContent("色域", value: info.primaries.isEmpty ? "未知" : info.primaries)
                     LabeledContent("位深", value: "\(info.bitDepth)-bit")
-                    Text("Log、RAW 和动态 HDR 的完整处理尚待移植，当前不进行有损近似转换。")
+                    Text("支持原版相机 LUT 的 Log → HLG 软件归档；RAW、动态 HDR 和 Log → SDR 仍需继续移植。")
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     Text("选择视频后显示格式信息。").foregroundStyle(.secondary)

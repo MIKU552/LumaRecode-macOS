@@ -64,6 +64,8 @@ final class WorkspaceModel {
         securityURL = granted ? url : nil
         sourceURL = url
         media = nil
+        selection.logProfile = nil
+        selection.interpretAsLog = false
         frameTimeline = nil
         frameTrimEnabled = false
         trimStartFrame = 1
@@ -78,6 +80,11 @@ final class WorkspaceModel {
                 let result = try await MediaProbe.inspect(tools: tools, url: url)
                 guard generation == self.loadGeneration else { return }
                 media = result
+                if let detected = result.detectedLogProfile, result.sourceColor == .log {
+                    selection.logProfile = detected
+                    selection.purpose = .archive
+                    if selection.codec == .avc { selection.codec = .hevc }
+                }
                 status = "已读取 \(result.codec.uppercased()) · \(result.width)×\(result.height)"
             } catch {
                 guard generation == self.loadGeneration else { return }
