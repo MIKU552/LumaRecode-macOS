@@ -61,9 +61,13 @@ struct LumaCLI {
           --range auto|source|limited|full
           --audio auto|copy|aac|opus
           --fast  (software archive AV1 only)
+          --log-profile pocket3|samsung|milog|applelog|applelog2
+          --interpret-log  (explicitly override missing/SDR color tags)
+          Log conversion currently outputs BT.2100 HLG via original LUTs.
+          Use software archive HEVC or AV1, 10-bit or higher.
 
-        Unported features (HDR10+ and Dolby Vision preservation, Log/RAW development,
-        Live Photos) are blocked rather than approximated.
+        Unported features (HDR10+/Dolby Vision preservation, ProRes RAW,
+        Log-to-SDR tone mapping, Live Photos) are blocked rather than approximated.
         """)
     }
 
@@ -125,10 +129,24 @@ struct LumaCLI {
                   let audio = AudioChoice(rawValue: value("--audio", args: words) ?? "auto") else {
                 throw LumaError.invalidInput("Invalid sampling, depth, range, or audio option.")
             }
+            let logProfileName = value("--log-profile", args: words)
+            let logProfile: CameraLogProfile?
+            if let logProfileName {
+                guard let known = CameraLogProfile(rawValue: logProfileName) else {
+                    throw LumaError.invalidInput(
+                        "Unknown camera Log profile. Use pocket3, samsung, milog, applelog or applelog2."
+                    )
+                }
+                logProfile = known
+            } else {
+                logProfile = nil
+            }
             let selection = EncodeSelection(
                 purpose: purpose, codec: codec, sampling: sampling,
                 bitDepth: depth, colorRange: range, audio: audio,
-                variant: words.contains("--fast") ? .fast : .standard
+                variant: words.contains("--fast") ? .fast : .standard,
+                logProfile: logProfile,
+                interpretAsLog: words.contains("--interpret-log")
             )
             let destination: URL
             if let path = value("--output", args: words) {
@@ -175,6 +193,8 @@ struct LumaCLI {
                               "color_range": selection.colorRange.rawValue,
                               "audio": selection.audio.rawValue,
                               "variant": selection.variant.rawValue,
+                              "log_profile": selection.logProfile?.rawValue as Any? ?? NSNull(),
+                              "interpret_as_log": selection.interpretAsLog,
                               "effective_audio": plan.selection.audio.rawValue,
                               "trim_start_frame": trimmed?.window.start as Any? ?? NSNull(),
                               "trim_end_frame": trimmed?.window.end as Any? ?? NSNull(),

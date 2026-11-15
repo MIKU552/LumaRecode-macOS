@@ -66,12 +66,36 @@ public enum MediaProbe {
         let formatTags = format["tags"] as? [String: Any] ?? [:]
         let tags = formatTags.merging(streamTags) { _, stream in stream }
         let raw = codec == "prores_raw" || (codec == "prores" && profile.contains("raw"))
-        let description = [
-            string(tags, "com.apple.quicktime.camera.identifier"),
-            string(tags, "com.apple.quicktime.video-log-color-space"),
-            string(tags, "LogProfile")
-        ].joined(separator: " ").lowercased()
-        let isLog = description.contains("log") && !description.contains("catalog")
+        // Use exactly the same evidence-based keys as the Windows Classify
+        // logic. A device name, codec or .MOV suffix never proves a Log curve.
+        let lowered = Dictionary(uniqueKeysWithValues: tags.map {
+            ($0.key.lowercased(), string(tags, $0.key).lowercased())
+        })
+        let appleLogKeys = [
+            "com.apple.proapps.logcolorspace",
+            "com.apple.proapps.color.logcolorspace"
+        ]
+        let appleLogValues = appleLogKeys.compactMap { lowered[$0] }
+        let detected: CameraLogProfile?
+        if appleLogValues.contains("com.apple.apple-wide-gamut.apple-log") {
+            detected = .applelog2
+        } else if appleLogValues.contains("com.apple.log.apple-log") {
+            detected = .applelog
+        } else if ["1", "true", "yes"].contains(lowered["com.xiaomi.record_log"] ?? "") {
+            detected = .milog
+        } else if let samsung = lowered["com.samsung.android.logvideo"],
+                  !samsung.isEmpty && !["0", "false", "no"].contains(samsung) {
+            detected = .samsung
+        } else {
+            detected = nil
+        }
+        let genericLog = lowered.contains { key, value in
+            let keyHints = ["log", "colorgamma", "color_mode", "colormode", "gamma"]
+            return keyHints.contains(where: { key.contains($0) })
+                && value.contains("log")
+                && !value.contains("catalog")
+        }
+        let isLog = detected != nil || genericLog
 
         let color: SourceColor
         if raw { color = .raw }
@@ -122,7 +146,8 @@ public enum MediaProbe {
             displayRotation: display == nil ? tagRotation : displayRotation,
             staticHDRMetadataPresent: hasStaticMetadata,
             timeBase: string(video, "time_base"),
-            isInterlaced: interlaced
+            isInterlaced: interlaced,
+            detectedLogProfile: detected
         )
     }
 
