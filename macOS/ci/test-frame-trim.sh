@@ -4,7 +4,7 @@
 # and refusal to copy uncut audio or publish an invalid output.
 set -euxo pipefail
 
-WORK="\${RUNNER_TEMP:-/tmp}/luma-frame-trim-$$"
+WORK="${RUNNER_TEMP:-/tmp}/luma-frame-trim-$"
 mkdir -p "$WORK"
 trap 'status=$?; for f in "$WORK"/*.jsonl; do if [[ -f "$f" ]]; then echo "== $f ==" >&2; tail -n 20 "$f" >&2; fi; done; rm -rf "$WORK"; exit "$status"' EXIT
 CLI="$(swift build --package-path macOS/Packages/LumaCore \
