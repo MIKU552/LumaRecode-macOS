@@ -11,7 +11,7 @@
 | SDR HEIC/JPEG/PNG | 初版 | 图片方向、颜色与元数据检查 |
 | Apple HDR HEIC | 10-bit PQ 初版（实验性、待 CI） | AVAssetReader P010 → Core Image PQ → HEIF10；HLG、色度与 EDR 实机验证待完成 |
 | Gain Map HEIC | 未实现 | SDR base + HDR gain map、Photos 原生显示验证 |
-| Apple Live Photo | SDR JPEG + MOV 初版，待 CI 验证 | 同 UUID、still-image-time 轨、PHLivePhoto 预览、明确授权的照片库导入；HDR/HEIC 未实现 |
+| Apple Live Photo | SDR JPEG + MOV 已经通过 Actions #79 | 同 UUID、still-image-time 轨、PHLivePhoto 实际内存预览已通过；照片库真正导入、HDR/HEIC 和跨设备兼容待验收 |
 | Dolby Vision / HDR10+ | 未实现 | 原始动态元数据跨帧保留、无降级 |
 | HDR10 静态 Mastering Display / MaxCLL | 软件 PQ → HEVC 初版（待专项 CI） | FFprobe SI 有理数 → x265 SEI 标度，编码后逐字段对比及不完整源拒绝；AV1/VT 不开放 |
 | Log LUT | HLG 转换初版（实验性，待 CI） | 5 份原版 LUT 哈希一致，ffprobe HLG 色彩验证；真实相机色彩误差及 SDR 色调映射尚待验收 |
@@ -87,4 +87,4 @@ Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus �
 
 ## Apple Live Photo 配对（2026-11-15）
 
-不同于 Windows `Core/MotionPhoto.cs` 的 Google JPEG+MP4 容器，新版 `LivePhotoPairing.swift` 和 `AppleLivePhotoExporter.swift` 使用 Apple MakerNote 17、QuickTime Content Identifier、still-image-time 定时轨构建配对。AVAssetExportSession 生成三秒以内 MOV，AVAssetWriter 按解码时间交织 B 帧/AAC 样本。PhotoKit 的照片库导入为单独授权的动作。新增真实 FFmpeg 样片 + PHLivePhoto.request 的集成验证。尚未宣布 HDR HEIC、Photos 交互验收及 iPhone 壁纸兼容性完成。
+不同于 Windows `Core/MotionPhoto.cs` 的 Google JPEG+MP4 容器，新版 `LivePhotoPairing.swift` 和 `AppleLivePhotoExporter.swift` 使用 Apple MakerNote 17、QuickTime Content Identifier、still-image-time 定时轨构建配对。AVAssetExportSession 生成三秒以内 MOV，AVAssetWriter 按解码时间交织 B 帧/AAC 样本。PhotoKit 的照片库导入为单独授权的动作。Actions #79 的真实 FFmpeg H.264 B 帧/AAC 样片成功导出配对、回读 still-image-time（1.5s）并经 PHLivePhoto.request 真实加载，Swift 核心测试、原生 App、媒体回归和 Live Photo 四项 CI 全部通过。新增音轨丢失拒绝及目标重名/非法 basename 测试。尚未宣布 HDR HEIC、Photos 照片库写入或 iPhone 壁纸兼容性完成。

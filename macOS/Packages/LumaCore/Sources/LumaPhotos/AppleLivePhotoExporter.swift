@@ -204,12 +204,16 @@ public enum AppleLivePhotoExporter {
             let input = AVAssetWriterInput(
                 mediaType: .audio, outputSettings: nil, sourceFormatHint: formats.first
             )
-            if reader.canAdd(output), writer.canAdd(input) {
-                reader.add(output)
-                writer.add(input)
-                audioOutput = output
-                audioInput = input
+            guard reader.canAdd(output), writer.canAdd(input) else {
+                throw LumaError.unsupported(
+                    "Live Photo MOV cannot preserve the source audio track. "
+                    + "Refusing to silently remove audio."
+                )
             }
+            reader.add(output)
+            writer.add(input)
+            audioOutput = output
+            audioInput = input
         }
 
         let contentIdentifier = AVMutableMetadataItem()

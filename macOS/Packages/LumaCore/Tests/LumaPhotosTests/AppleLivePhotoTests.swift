@@ -104,5 +104,42 @@ final class AppleLivePhotoTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: dir.appendingPathComponent("hdr.jpg").path
         ))
+
+        // Reject an existing destination BEFORE attempting to open source.
+        // Never overwrite one half of an existing Apple Live Photo pair.
+        var sdr = media
+        sdr.codec = "h264"
+        sdr.bitDepth = 8
+        sdr.pixelFormat = "yuv420p"
+        sdr.primaries = "bt709"
+        sdr.transfer = "bt709"
+        sdr.matrix = "bt709"
+        sdr.sourceColor = .sdr
+        let existingMovie = dir.appendingPathComponent("taken.mov")
+        let sentinel = Data("keep-existing-movie".utf8)
+        try sentinel.write(to: existingMovie)
+        do {
+            _ = try await AppleLivePhotoExporter.export(
+                from: sdr, selectedTime: 1, to: dir, name: "taken"
+            )
+            XCTFail("An existing MOV must block the entire new pair.")
+        } catch LumaError.invalidInput {
+            // Expected.
+        }
+        XCTAssertEqual(try Data(contentsOf: existingMovie), sentinel)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.appendingPathComponent("taken.jpg").path
+        ))
+        do {
+            _ = try await AppleLivePhotoExporter.export(
+                from: sdr, selectedTime: 1, to: dir, name: "../escape"
+            )
+            XCTFail("Destination path traversal must be rejected.")
+        } catch LumaError.invalidInput {
+            // Expected.
+        }
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: dir.deletingLastPathComponent().appendingPathComponent("escape.mov").path
+        ))
     }
 }

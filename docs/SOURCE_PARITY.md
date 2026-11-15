@@ -34,3 +34,7 @@ Windows provenance: `MediaProbe.cs` collects stream and early frame side data; `
 ## Native Apple Live Photo / original Google Motion Photo
 
 Original Windows `Core/MotionPhoto.cs` writes Google Motion Photo 1.0 as JPEG APP1 XMP plus appended MP4. Apple Live Photo requires an entirely different native format: JPEG Apple MakerNote field 17, identical QuickTime Content Identifier in the MOV, and a timed `mdta/com.apple.quicktime.still-image-time` track. A single Photos creation request can pair `.photo` and `.pairedVideo`, only after explicit user authorization. New macOS CI checks ImageIO/AVFoundation metadata and in-memory PHLivePhoto recognition using SDR video with H.264 B frames and AAC. HDR HEIC/Gain Map Live Photos remain unported. FFmpeg is external and user-provided.
+
+### Native SDR Live Photo CI result (Actions #79)
+
+The H.264+B-frame/AAC integration produced actual JPEG and MOV files, recovered matching MakerApple / QuickTime UUID, read `mdta/com.apple.quicktime.still-image-time` at 1.5 seconds, and successfully loaded the pair through Apple `PHLivePhoto.request` on the Xcode 27.2 runner. CI does not establish add-to-library results on user devices, iPhone wallpaper compatibility, or HDR/HEIC/gain-map support. Audio is never silently removed when the input contains a track.

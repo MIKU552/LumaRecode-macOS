@@ -2,7 +2,7 @@
 
 **独立 Swift / SwiftUI 原生移植项目**，以 macOS 27 与 Apple Silicon 为目标。不修改 [Windows 原版 LumaRecode](https://github.com/MIKU552/LumaRecode) 仓库。
 
-> **开发中，不是完整功能对等的正式版本。** 原 Windows 版的大量专业功能仍需逐模块移植和实机验证。尤其是动态 HDR、ProRes RAW、Log → SDR 色调映射与 Apple HDR Gain Map，仍未完整移植；SDR Apple Live Photo 配对代码已加入，待完整 CI 和实机验证。
+> **开发中，不是完整功能对等的正式版本。** 原 Windows 版的大量专业功能仍需逐模块移植和实机验证。尤其是动态 HDR、ProRes RAW、Log → SDR 色调映射与 Apple HDR Gain Map，仍未完整移植；SDR Apple Live Photo 配对已通过 macOS CI，照片库真实导入与跨设备兼容仍待验收。
 
 ## 已提交代码
 
@@ -22,7 +22,7 @@
 - ProRes RAW 显影。
 - 高级逐帧裁剪边界（VFR、负 PTS、音频起始偏移）及多帧预览渲染；B 帧/PTS 初版已实现。
 - Apple HDR Gain Map、自适应 HDR HEIC（10-bit PQ HEIC 已有实验性版本）。
-- Apple HDR/HEIC Live Photo 配对、Mac 真机照片图库显示及 iPhone 壁纸兼容性。SDR JPEG + MOV 初版已进入 CI 实测。
+- Apple HDR/HEIC Live Photo 配对、Mac 真机照片图库写入与 iPhone 壁纸兼容性。SDR JPEG + MOV 已通过 Apple PHLivePhoto CI 加载测试。
 - 完整的 CLI 参数和旧版 JSON 事件兼容、四语本地化、原生通知、全量媒体回归验证。
 
 目前素材探测和编解码流程中的动态 HDR 检测属于第一阶段；**不能视为完整的元数据保留安全保证**，存在探测信息不足的风险。未完成的专业视频工作请继续使用 Windows 版。
@@ -124,7 +124,7 @@ HEVC / AV1 输入在正式编码前，使用用户安装的 `ffprobe` **逐帧�
 
 FFmpeg / ffprobe 仍由用户自行安装，项目不内嵌任何多媒体可执行程序或库。
 
-## Apple 原生 Live Photo（SDR 初版）
+## Apple 原生 Live Photo（SDR CI 已验证）
 
 Windows 原版的 `Core/MotionPhoto.cs` 实现 Google Motion Photo（JPEG 内嵌 MP4），而 Apple Live Photo 是两份**独立配对资源**。macOS 版通过 ImageIO、AVFoundation、PhotoKit 原生构建：
 
@@ -133,6 +133,6 @@ Windows 原版的 `Core/MotionPhoto.cs` 实现 Google Motion Photo（JPEG 内嵌
 - MOV 有 `mdta/com.apple.quicktime.still-image-time` 定时元数据轨，取自实际生成的封面帧时间。
 - 在临时目录内导出并回读校验文件，全部检查通过才保存；发现目标重名时拒绝覆盖。
 - 仅用户明确点击“添加为照片图库 Live Photo”后申请相册权限，用同一个 `PHAssetCreationRequest` 导入 `.photo` 和 `.pairedVideo`。
-- GitHub Actions 使用带 B 帧、AAC 音轨的真实合成视频，并要求 Apple `PHLivePhoto.request` 能在内存中识别配对。实测是否通过，以最新 CI 为准。
+- [Actions #79](https://github.com/MIKU552/LumaRecode-macOS/actions/runs/43683328792) 用带 B 帧、AAC 音轨的真实 H.264 视频验证了 JPEG + MOV 配对、Movie Content Identifier、1.5 秒的 still-image-time，以及 Apple `PHLivePhoto.request` 的实际内存加载，**全部通过**。
 
 该阶段不允许把 HDR/HLG/Log 视频静默降成 SDR Live Photo。HDR HEIC/Gain Map、Mac 实机照片库与 iPhone 壁纸兼容性仍未验收；FFmpeg 不随 App 分发。
