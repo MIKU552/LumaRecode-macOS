@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// A single-use, cancellable conversion. Never writes directly to the final destination.
 public final class ConversionSession: @unchecked Sendable {
@@ -32,7 +33,7 @@ public final class ConversionSession: @unchecked Sendable {
     public func execute(
         plan: EncodingPlan, tools: MediaTools, source: MediaInfo,
         overwrite: Bool = false,
-        onProgress: @escaping (TranscodeProgress) -> Void = { _ in }
+        onProgress: @escaping @Sendable (TranscodeProgress) -> Void = { _ in }
     ) async throws -> URL {
         let fm = FileManager.default
         guard fm.fileExists(atPath: source.url.path) else {
@@ -85,7 +86,7 @@ public final class ConversionSession: @unchecked Sendable {
 
     private func run(
         plan: EncodingPlan, duration: Double,
-        onProgress: @escaping (TranscodeProgress) -> Void
+        onProgress: @escaping @Sendable (TranscodeProgress) -> Void
     ) async throws {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -131,15 +132,17 @@ public final class ConversionSession: @unchecked Sendable {
                         group.leave()
                     }
                     group.enter()
-                    var stderrTail = Data()
+                    let stderrTail = Mutex(Data())
                     DispatchQueue.global(qos: .utility).async {
                         let file = stderr.fileHandleForReading
                         while true {
                             let chunk = file.availableData
                             if chunk.isEmpty { break }
-                            stderrTail.append(chunk)
-                            if stderrTail.count > 64 * 1024 {
-                                stderrTail.removeFirst(stderrTail.count - 64 * 1024)
+                            stderrTail.withLock { buffer in
+                                buffer.append(chunk)
+                                if buffer.count > 64 * 1024 {
+                                    buffer.removeFirst(buffer.count - 64 * 1024)
+                                }
                             }
                         }
                         group.leave()
@@ -150,7 +153,8 @@ public final class ConversionSession: @unchecked Sendable {
                     if self.isCancelled() { throw LumaError.cancelled }
                     guard task.terminationStatus == 0 else {
                         throw LumaError.processFailed(
-                            String(data: stderrTail, encoding: .utf8) ?? "FFmpeg failed with exit code \(task.terminationStatus)."
+                            stderrTail.withLock { String(data: $0, encoding: .utf8) }
+                            ?? "FFmpeg failed with exit code \(task.terminationStatus)."
                         )
                     }
                     continuation.resume()
