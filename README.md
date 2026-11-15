@@ -67,6 +67,14 @@ open macOS/LumaRecode.xcodeproj
 
 项目状态与测试结果请以本仓库的 Actions 为准。
 
+## 开发与 AI 协作
+
+本 macOS 移植项目由 **[MIKU552](https://github.com/MIKU552)** 负责需求、仓库管理及最终审核和实机验收。Swift / SwiftUI 的移植代码由 **ChatGPT（GPT-6）** 在用户授权的 GitHub 连接下协助开发，开发方式与 Windows 原项目使用 Codex 的情况有所不同。
+
+为了与 [Windows 原版 LumaRecode](https://github.com/MIKU552/LumaRecode) 的 Git 历史保持一致，AI 协作的提交消息统一使用 `Co-authored-by: Codex <codex@openai.com>` 作为共同作者署名，Git 的主作者和提交者仍是 **MIKU552**。这里的 Codex 标记是项目采用的统一协作署名，**并不表示当前 ChatGPT 以官方 @codex GitHub 账号登录、推送代码，或由 Codex 产品亲自完成这些提交**。
+
+移植功能的实际可用性以仓库 CI、后续 macOS 实机测试及发行验收为准。
+
 ## Swift 6.4 / 严格并发
 
 使用 Xcode 27.2 的 Swift 6.4.2 编译器，Swift Package 启用 `swift-tools-version: 6.4` 与 Swift 6 语言模式，Xcode 工程设置 `SWIFT_VERSION: 6.0`（语言模式名称，**不是** 6.0 编译器版本）。已开始处理 Swift 6 严格并发诊断；最终兼容性须经后续 CI 验证。
