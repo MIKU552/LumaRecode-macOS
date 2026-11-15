@@ -47,6 +47,8 @@ public final class ConversionSession: @unchecked Sendable {
         }
         defer { try? fm.removeItem(at: plan.temporary) }
         if isCancelled() { throw LumaError.cancelled }
+        try await MediaRequirements.check(tools: tools, plan: plan)
+        if isCancelled() { throw LumaError.cancelled }
         try await run(plan: plan, duration: source.duration, onProgress: onProgress)
         if isCancelled() { throw LumaError.cancelled }
         guard fm.fileExists(atPath: plan.temporary.path) else {

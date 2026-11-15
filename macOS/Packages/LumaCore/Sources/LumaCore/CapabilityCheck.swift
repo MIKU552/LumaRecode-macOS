@@ -1,6 +1,6 @@
 import Foundation
 
-public struct EncoderCapabilities {
+public struct EncoderCapabilities: Sendable {
     public let encoders: Set<String>
     public let filters: Set<String>
     public let version: String
@@ -13,7 +13,8 @@ public struct EncoderCapabilities {
         let filterData = try await CommandCapture.run(tools.ffmpeg, ["-hide_banner", "-filters"], timeout: 15)
         let encoderNames: Set<String> = Set(encoderData.text.split(separator: "\n").compactMap { line in
             let words = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard words.count > 1, words[0].count == 6, words[0].first == "V" else { return nil }
+            guard words.count > 1, words[0].count == 6,
+                  words[0].first == "V" || words[0].first == "A" else { return nil }
             return String(words[1])
         })
         let filterNames: Set<String> = Set(filterData.text.split(separator: "\n").compactMap { line in
