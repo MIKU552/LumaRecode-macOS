@@ -29,9 +29,17 @@ final class AppleHDRPhotoTests: XCTestCase {
             "-pix_fmt", "yuv420p10le",
             "-color_primaries", "bt2020", "-color_trc", "smpte2084",
             "-colorspace", "bt2020nc",
+            // AVFoundation and QuickTime expect hvc1 for HEVC in MP4.
+            "-tag:v", "hvc1",
             "-an", input.path
         ], timeout: 90)
         XCTAssertEqual(output.code, 0)
+        let tag = try await CommandCapture.run(tools.ffprobe, [
+            "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=codec_tag_string",
+            "-of", "default=nw=1:nk=1", input.path
+        ], timeout: 20)
+        XCTAssertEqual(tag.text.trimmingCharacters(in: .whitespacesAndNewlines), "hvc1")
         let media = try await MediaProbe.inspect(tools: tools, url: input)
         XCTAssertEqual(media.sourceColor, .pq, "Test source HEVC VUI must declare PQ.")
         XCTAssertEqual(media.bitDepth, 10, "Test source must be 10-bit.")
