@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 struct JobsWorkspace: View {
-    @EnvironmentObject private var model: WorkspaceModel
+    @Environment(WorkspaceModel.self) private var model
 
     var body: some View {
         if model.jobs.isEmpty {

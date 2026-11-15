@@ -2,12 +2,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @EnvironmentObject private var model: WorkspaceModel
+    @Environment(WorkspaceModel.self) private var model
     @State private var importing = false
     @State private var inspectorVisible = true
     @State private var playerWarning = false
 
     var body: some View {
+        @Bindable var model = model
         NavigationSplitView {
             List(selection: $model.area) {
                 Section("工作区") {
