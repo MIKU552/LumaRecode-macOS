@@ -95,6 +95,9 @@ jobs:
       - name: Verify exact B-frame trim and re-encoded audio
         run: bash macOS/ci/test-frame-trim.sh
 
+      - name: Verify original camera Log LUT to 10-bit HLG
+        run: bash macOS/ci/test-log-hlg.sh
+
       - name: Verify PQ video to native HEIC10 pipeline
         env:
           LUMA_PQ_VIDEO_CI: "1"
