@@ -36,6 +36,63 @@ public enum HDRSideDataSweep {
         return .none
     }
 
+    /// Parses compact ffprobe side-data records with their original numeric
+    /// values. This catches a later mastering-display change even if its
+    /// side_data_type is identical to the first frame's SEI.
+    static func staticMetadata(in line: String) -> HDRStaticMetadata? {
+        var records: [String: [String: Any]] = [:]
+        for field in line.split(separator: "|") {
+            guard field.hasPrefix("side_datum/"),
+                  let colon = field.firstIndex(of: ":") else { continue }
+            let prefix = String(field[..<colon])
+            guard prefix == "side_datum/mastering_display_metadata"
+                || prefix == "side_datum/content_light_level_metadata" else { continue }
+            let remainder = field[field.index(after: colon)...]
+            guard let equal = remainder.firstIndex(of: "=") else { continue }
+            let name = String(remainder[..<equal])
+            let value = String(remainder[remainder.index(after: equal)...])
+            records[prefix, default: [:]][name] = value
+        }
+        guard !records.isEmpty else { return nil }
+        return HDRStaticMetadata.parse(Array(records.values))
+    }
+
+    static func verifyRecord(_ line: String, source: MediaInfo) throws {
+        switch evidence(in: line) {
+        case .none:
+            return
+        case .dynamicHDR:
+            throw LumaError.unsupported(
+                "HDR10+/Dolby Vision side data appears in a decoded frame. "
+                + "This output would discard dynamic HDR metadata."
+            )
+        case .staticHDR:
+            guard source.staticHDRMetadataPresent,
+                  let expected = source.hdrStaticMetadata else {
+                throw LumaError.unsupported(
+                    "Static HDR10 data was not fully detected in the initial source probe."
+                )
+            }
+            guard let detected = staticMetadata(in: line) else {
+                throw LumaError.validationFailed(
+                    "Full HDR scan found an incomplete or unparseable static SEI record."
+                )
+            }
+            // A frame may expose only the mastering or only the content-light
+            // message. Compare all present fields, preserving absent components.
+            let expanded = HDRStaticMetadata(
+                masteringDisplay: detected.masteringDisplay ?? expected.masteringDisplay,
+                contentLight: detected.contentLight ?? expected.contentLight
+            )
+            guard expected.equivalent(to: expanded) else {
+                throw LumaError.unsupported(
+                    "HDR10 mastering or MaxCLL/MaxFALL values change after the initial "
+                    + "probe. Per-frame static SEI preservation is not implemented."
+                )
+            }
+        }
+    }
+
     /// Fail closed for HDR-bearing codecs if the complete decoded scan fails.
     /// Cancellation terminates the ffprobe process as well as the encoder.
     public static func verifyBeforeEncoding(
@@ -56,7 +113,9 @@ public enum HDRSideDataSweep {
                 process.arguments = [
                     "-v", "error", "-select_streams", String(source.videoStreamIndex),
                     "-show_frames", "-show_entries",
-                    "frame=:frame_side_data=side_data_type",
+                    "frame=:frame_side_data=side_data_type,green_x,green_y,blue_x,blue_y,"
+                    + "red_x,red_y,white_point_x,white_point_y,max_luminance,min_luminance,"
+                    + "max_content,max_average",
                     "-of", "compact=p=1:nk=0", source.url.path
                 ]
                 let stdout = Pipe()
@@ -108,19 +167,10 @@ public enum HDRSideDataSweep {
                             }
                             let line = String(decoding: lineData, as: UTF8.self)
                             if line.hasPrefix("frame") { scannedFrames += 1 }
-                            switch evidence(in: line) {
-                            case .none: break
-                            case .dynamicHDR:
-                                checkError = LumaError.unsupported(
-                                    "Dynamic HDR metadata was found in a later decoded frame. "
-                                    + "Encoding would discard HDR10+/Dolby Vision metadata."
-                                )
-                            case .staticHDR where !source.staticHDRMetadataPresent:
-                                checkError = LumaError.unsupported(
-                                    "Static HDR10 metadata first appears after the initial source probe. "
-                                    + "Its preservation has not been validated."
-                                )
-                            case .staticHDR: break
+                            do {
+                                try verifyRecord(line, source: source)
+                            } catch {
+                                checkError = error
                             }
                             if checkError != nil { break }
                         }
@@ -133,17 +183,10 @@ public enum HDRSideDataSweep {
                     if checkError == nil && !pending.isEmpty {
                         let line = String(decoding: pending, as: UTF8.self)
                         if line.hasPrefix("frame") { scannedFrames += 1 }
-                        switch evidence(in: line) {
-                        case .none: break
-                        case .dynamicHDR:
-                            checkError = LumaError.unsupported(
-                                "Unported dynamic HDR side data was detected."
-                            )
-                        case .staticHDR where !source.staticHDRMetadataPresent:
-                            checkError = LumaError.unsupported(
-                                "Unreported HDR10 mastering metadata was detected."
-                            )
-                        case .staticHDR: break
+                        do {
+                            try verifyRecord(line, source: source)
+                        } catch {
+                            checkError = error
                         }
                     }
                     if checkError != nil && process.isRunning { process.terminate() }
