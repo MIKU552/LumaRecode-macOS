@@ -30,17 +30,20 @@ struct EncodingInspector: View {
                     }
                 }
                 .onChange(of: model.selection.purpose) { _, purpose in
+                    // Do not send the local @Bindable projection to callbacks.
+                    let workspace = self.model
                     if purpose == .share {
-                        if model.selection.codec == .av1 { model.selection.codec = .hevc }
-                        model.selection.variant = .standard
+                        if workspace.selection.codec == .av1 { workspace.selection.codec = .hevc }
+                        workspace.selection.variant = .standard
                     }
-                    model.selection.sampling = .automatic
-                    model.selection.bitDepth = .automatic
+                    workspace.selection.sampling = .automatic
+                    workspace.selection.bitDepth = .automatic
                 }
                 .onChange(of: model.selection.codec) { _, codec in
-                    if codec != .av1 { model.selection.variant = .standard }
-                    model.selection.sampling = .automatic
-                    model.selection.bitDepth = .automatic
+                    let workspace = self.model
+                    if codec != .av1 { workspace.selection.variant = .standard }
+                    workspace.selection.sampling = .automatic
+                    workspace.selection.bitDepth = .automatic
                 }
                 if model.selection.purpose == .archive {
                     LabeledContent("编码模式", value: "FFmpeg 软件")

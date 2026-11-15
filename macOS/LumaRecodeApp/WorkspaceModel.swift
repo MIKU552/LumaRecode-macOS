@@ -62,7 +62,7 @@ final class WorkspaceModel {
         loading = true
         progress = nil
         status = "正在分析素材…"
-        Task {
+        Task { [self] in
             do {
                 let tools = try resolveTools()
                 let result = try await MediaProbe.inspect(tools: tools, url: url)
