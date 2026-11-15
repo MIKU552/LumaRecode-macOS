@@ -239,18 +239,19 @@ public enum AppleLivePhotoExporter {
         do {
             try writer.start()
             writer.startSession(atSourceTime: .zero)
-            diagnostics("start timed metadata receiver append")
-            try await metadataReceiver.append(timedGroup)
-            diagnostics("timed metadata receiver append finished")
-            metadataReceiver.finish()
-
-            // Interleave compressed video and audio samples by their source
-            // decode timestamps. Feeding three seconds of video before
-            // writing any audio can deadlock AVAssetWriter's muxing buffers.
+            // AVAssetWriter may wait for the first video/audio sample before
+            // admitting timed metadata. Do not await the metadata receiver
+            // before the muxer has any media: run both producer paths together.
+            diagnostics("begin concurrent timed metadata and media append")
+            async let metadataWrite: Void = metadataReceiver.append(timedGroup)
             try await copyInterleaved(
                 videoOutput: trackOutput, videoInput: videoInput,
                 audioOutput: audioOutput, audioInput: audioInput, writer: writer
             )
+            diagnostics("media samples written")
+            try await metadataWrite
+            metadataReceiver.finish()
+            diagnostics("timed metadata receiver append finished")
             guard reader.status == .completed else {
                 throw LumaError.processFailed(
                     reader.error?.localizedDescription ?? "Live Photo media reader did not finish."
