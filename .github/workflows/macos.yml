@@ -92,6 +92,9 @@ jobs:
       - name: Verify multitrack audio, range conversion, and fail-closed options
         run: bash macOS/ci/test-media-parity.sh
 
+      - name: Verify exact B-frame trim and re-encoded audio
+        run: bash macOS/ci/test-frame-trim.sh
+
       - name: Verify PQ video to native HEIC10 pipeline
         env:
           LUMA_PQ_VIDEO_CI: "1"
