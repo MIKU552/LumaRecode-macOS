@@ -44,6 +44,14 @@ struct VideoWorkspace: View {
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
+                    if model.frameTrimEnabled, let timeline = model.frameTimeline {
+                        Label(
+                            "逐帧裁剪：\(model.trimStartFrame)–\(model.trimEndFrame) / \(timeline.count)",
+                            systemImage: "scissors"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                     if media.dynamicHDR {
                         Label("动态 HDR 元数据保留尚未移植，因此禁止此素材的转换。", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.orange)
