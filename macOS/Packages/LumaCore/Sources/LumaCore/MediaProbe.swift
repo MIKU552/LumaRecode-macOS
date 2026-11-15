@@ -30,7 +30,7 @@ public enum MediaProbe {
         let codec = string(video, "codec_name")
         let profile = string(video, "profile").lowercased()
         let tags = (video["tags"] as? [String: Any]) ?? [:]
-        let raw = codec == "prores" && profile.contains("raw")
+        let raw = codec == "prores_raw" || (codec == "prores" && profile.contains("raw"))
         let descriptionText = [string(tags, "com.apple.quicktime.camera.identifier"),
                                string(tags, "com.apple.quicktime.video-log-color-space"),
                                string(tags, "LogProfile")].joined(separator: " ").lowercased()
@@ -44,7 +44,10 @@ public enum MediaProbe {
         else { color = .unknown }
 
         let sideData = (video["side_data_list"] as? [[String: Any]]) ?? []
-        let evidence = sideData.map { string($0, "side_data_type") }.joined(separator: " ")
+        let frameSideData = ((doc["frames"] as? [[String: Any]]) ?? [])
+            .flatMap { ($0["side_data_list"] as? [[String: Any]]) ?? [] }
+        let evidence = (sideData + frameSideData)
+            .map { string($0, "side_data_type") }.joined(separator: " ")
         let codecTag = string(video, "codec_tag_string").lowercased()
         let dynamicHDR = evidence.localizedCaseInsensitiveContains("DOVI")
             || evidence.localizedCaseInsensitiveContains("Dolby Vision")
@@ -71,6 +74,29 @@ public enum MediaProbe {
         let output = try await CommandCapture.run(tools.ffprobe, [
             "-v", "error", "-show_streams", "-show_format", "-of", "json", url.path
         ], timeout: 35)
-        return try parse(output.stdout, url: url)
+        var info = try parse(output.stdout, url: url)
+        // ffprobe often emits HDR10+ metadata on decoded frames rather than
+        // stream headers. Inspect a bounded number of initial frames to avoid
+        // accidentally dropping visible dynamic metadata in the basic path.
+        // This is an early warning, NOT proof of absence later in the clip.
+        if info.sourceColor.isHDR && !info.dynamicHDR {
+            if let frames = try? await CommandCapture.run(tools.ffprobe, [
+                "-v", "error", "-select_streams", "v:0",
+                "-read_intervals", "%+#3", "-show_frames", "-of", "json", url.path
+            ], timeout: 35, limit: 2 * 1024 * 1024),
+               let document = try? JSONSerialization.jsonObject(with: frames.stdout) as? [String: Any],
+               let items = document["frames"] as? [[String: Any]] {
+                let evidence = items.flatMap {
+                    ($0["side_data_list"] as? [[String: Any]]) ?? []
+                }.map { string($0, "side_data_type") }.joined(separator: " ")
+                if evidence.localizedCaseInsensitiveContains("DOVI")
+                    || evidence.localizedCaseInsensitiveContains("Dolby Vision")
+                    || evidence.localizedCaseInsensitiveContains("HDR10+") {
+                    info.dynamicHDR = true
+                    info.dynamicHDRDescription = evidence
+                }
+            }
+        }
+        return info
     }
 }
