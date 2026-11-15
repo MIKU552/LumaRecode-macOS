@@ -2,14 +2,15 @@
 
 **独立 Swift / SwiftUI 原生移植项目**，以 macOS 27 与 Apple Silicon 为目标。不修改 [Windows 原版 LumaRecode](https://github.com/MIKU552/LumaRecode) 仓库。
 
-> **开发中，不是完整功能对等的正式版本。** 原 Windows 版的大量专业功能仍需逐模块移植和实机验证。尤其是动态 HDR、ProRes RAW、Log 色彩转换与 Apple Live Photo，不能当作已实现。
+> **开发中，不是完整功能对等的正式版本。** 原 Windows 版的大量专业功能仍需逐模块移植和实机验证。尤其是动态 HDR、ProRes RAW、Log → SDR 色调映射与 Apple Live Photo，仍未完整移植；相机 Log → HLG 是新加入的实验性功能。
 
 ## 已提交代码
 
 - SwiftUI / AppKit 原生 Mac 侧边栏、检查器、设置窗口、AVKit 预览与任务历史（遵循系统原生外观）。
 - 独立 Swift Package \`LumaCore\`：ffprobe 探测、路径发现、FFmpeg 参数规划、可取消的任务、临时输出与输出验证。
-- **软件归档预设**：x264 medium/CRF21、x265 medium/CRF23、SVT-AV1 preset4/CRF32；保留原仓库相关软件编码器参数的初始版本。
+- **软件归档预设**：x264 medium/CRF21、x265 medium/CRF23、SVT-AV1 preset4/CRF32；从原仓库的 JSON 直接读取软件编码参数。
 - **快速分享**：FFmpeg VideoToolbox H.264/HEVC，候选质量值 70/65；使用 \`-allow_sw 0\` 防止硬件模式悄悄退化为软件编码。不宣称质量已实测验证。
+- **相机 Log → HLG 初版（实验性）**：原样引入 Windows 已测试的 5 份 LUT，保留 YCbCr 输入矩阵/范围、32-bit float RGB 中间层、四面体插值、HLG/BT.2020 标签与输出验证；仅软件 HEVC/AV1、至少 10-bit。Log → SDR 尚未开放。
 - SDR 静态照片：使用 AVFoundation + ImageIO 输出 HEIC、JPEG、PNG。
 - 原生 Swift CLI：\`doctor\`、\`probe\`、\`frames\`、\`plan\`、\`convert\` 初步实现。
 - macOS 27 / Xcode 27 GitHub Actions 自动生成 Xcode 工程、Swift 测试、构建 SwiftUI .app 和 CLI。
@@ -17,9 +18,9 @@
 ## 尚未移植（会拒绝不安全的处理）
 
 - Dolby Vision / HDR10+ 的逐帧元数据保留与转换。
-- DJI、Samsung、Xiaomi、Apple Log 及 Apple Log 2 色彩科学。
+- Log → SDR（原版 BT.2390 / libplacebo 色调映射）及相机 Log LUT 的实机色彩一致性验收。
 - ProRes RAW 显影。
-- 逐帧裁剪与多帧预览渲染（PTS 时间轴索引与 CLI 查询已实现）。
+- 高级逐帧裁剪边界（VFR、负 PTS、音频起始偏移）及多帧预览渲染；B 帧/PTS 初版已实现。
 - Apple HDR Gain Map、自适应 HDR HEIC（10-bit PQ HEIC 已有实验性版本）。
 - 原生 Live Photo（配对 HEIC / MOV、关联元数据和 PhotoKit）。
 - 完整的 CLI 参数和旧版 JSON 事件兼容、四语本地化、原生通知、全量媒体回归验证。
@@ -92,3 +93,16 @@ open macOS/LumaRecode.xcodeproj
 ## 精确逐帧裁剪（初版）
 
 Swift Package 提供 `FrameTrimPlanner`，支持 CLI `--start-frame / --end-frame`（从零开始，终点不包含）或 `--start-time / --end-time`。Mac 原生 Inspector 提供从第 1 帧开始的包含式选择器，内部统一映射到 PTS 时间轴。裁剪会重新编码音轨（默认 AAC），并在发布前解码检查帧数。此阶段不启用依赖关键帧位置的快速输入 seek，优先保证 B 帧素材处理正确；变帧率、特殊负 PTS、音频偏移需要继续验证。
+
+## 原版相机 Log → HLG（实验性）
+
+使用 Windows 原项目 `Core/Transcoder.cs` 的精确色彩管线及 `Assets/*.cube` 五份 LUT：DJI Pocket 3 D-Log M、Samsung Log、Xiaomi Mi-Log、Apple Log、Apple Log 2。文件直接储存在 Swift Package 资源中（**只是相机 LUT，不是 FFmpeg 或任何编解码器**）；构建时不从网络下载，Git SHA 已与原版固定提交校验。
+
+通过原生检查器选择「相机 Log 色彩」或 CLI：
+
+```bash
+lumarecode convert camera.mov --purpose archive --codec hevc \\
+  --log-profile applelog --interpret-log --output camera_HLG.mkv
+```
+
+`--interpret-log` 仅用于相机标签缺失或错误时手动明确确认输入为 Log；元数据匹配时不需要它。此功能只处理相机 Log → **BT.2100 HLG**，并以原版软件归档参数编码。不会将设备型号或文件名猜成特定曲线，也不会将没有通过色彩校验的输出发布。Log → SDR、RAW、动态 HDR 仍不支持。真实 Log 相机样本与 Apple EDR 显示仍需实测。
