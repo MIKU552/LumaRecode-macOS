@@ -29,6 +29,7 @@ struct LumaCLI {
         Usage:
           lumarecode doctor [--ffmpeg PATH] [--ffprobe PATH]
           lumarecode probe INPUT [--json]
+          lumarecode frames INPUT    # exact original PTS frame count / time base
           lumarecode plan INPUT [--codec hevc|avc|av1] [--purpose archive|share] [--output PATH]
           lumarecode convert INPUT [--codec ...] [--purpose ...] [--output PATH] [--overwrite] [--json]
 
@@ -63,11 +64,26 @@ struct LumaCLI {
                 ])
                 return
             }
-            guard ["probe", "plan", "convert"].contains(command), words.count >= 2 else {
+            guard ["probe", "frames", "plan", "convert"].contains(command), words.count >= 2 else {
                 throw LumaError.unsupported("Unknown or not-yet-ported CLI command: \(command)")
             }
             let input = URL(fileURLWithPath: words[1]).standardizedFileURL
             let media = try await MediaProbe.inspect(tools: tools, url: input)
+            if command == "frames" {
+                let timeline = try await FrameTimelineLoader.load(tools: tools, media: media)
+                let payload: [String: Any] = [
+                    "schema_version": 1, "input": input.path,
+                    "frames": timeline.count,
+                    "duration": timeline.duration,
+                    "time_base": "\(timeline.numerator)/\(timeline.denominator)",
+                    "first_pts": timeline.frames[0].pts,
+                    "last_pts": timeline.frames[timeline.count - 1].pts,
+                    "packet_indexed": timeline.packetIndexed
+                ]
+                let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+                print(String(decoding: data, as: UTF8.self))
+                return
+            }
             if command == "probe" {
                 let encoder = JSONEncoder()
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

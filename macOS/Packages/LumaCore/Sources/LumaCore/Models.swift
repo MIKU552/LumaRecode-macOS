@@ -63,6 +63,9 @@ public struct MediaInfo: Codable, Equatable, Sendable {
     public var displayRotation: Double
     /// Source mastering display / content light level metadata is not yet writable.
     public var staticHDRMetadataPresent: Bool
+    /// FFmpeg rational timestamp time base for exact display-frame indexing.
+    public var timeBase: String
+    public var isInterlaced: Bool
 
     public init(
         url: URL, codec: String, width: Int, height: Int, duration: Double,
@@ -70,7 +73,8 @@ public struct MediaInfo: Codable, Equatable, Sendable {
         transfer: String, matrix: String, colorRange: String, audioCodecs: [String],
         sourceColor: SourceColor, dynamicHDR: Bool, dynamicHDRDescription: String? = nil,
         videoStreamIndex: Int = 0, codecTag: String = "", displayRotation: Double = 0,
-        staticHDRMetadataPresent: Bool = false
+        staticHDRMetadataPresent: Bool = false,
+        timeBase: String = "", isInterlaced: Bool = false
     ) {
         self.url = url; self.codec = codec; self.width = width; self.height = height
         self.duration = duration; self.frameRate = frameRate; self.pixelFormat = pixelFormat
@@ -82,6 +86,8 @@ public struct MediaInfo: Codable, Equatable, Sendable {
         self.codecTag = codecTag
         self.displayRotation = displayRotation
         self.staticHDRMetadataPresent = staticHDRMetadataPresent
+        self.timeBase = timeBase
+        self.isInterlaced = isInterlaced
     }
 }
 
