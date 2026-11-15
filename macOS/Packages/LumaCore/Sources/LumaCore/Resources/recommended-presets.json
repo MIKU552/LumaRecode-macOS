@@ -1,0 +1,96 @@
+{
+  "archive": {
+    "avc": {
+      "encoder": "libx264",
+      "preset": "medium",
+      "quality": 21,
+      "pixel_format": "yuv420p",
+      "encoder_parameters": {
+        "aq-mode": 2,
+        "aq-strength": 0.8
+      }
+    },
+    "hevc": {
+      "encoder": "libx265",
+      "preset": "medium",
+      "quality": 23,
+      "pixel_format": "yuv420p10le",
+      "encoder_parameters": {
+        "rdoq-level": 2,
+        "psy-rdoq": 1
+      }
+    },
+    "av1": {
+      "encoder": "libsvtav1",
+      "preset": "4",
+      "quality": 32,
+      "pixel_format": "yuv420p10le",
+      "tune": 0,
+      "lp": 0,
+      "encoder_parameters": {
+        "enable-qm": 1,
+        "qm-min": 8,
+        "qm-max": 15
+      }
+    }
+  },
+  "archive_fast_av1": {
+    "encoder": "libsvtav1",
+    "preset": "6",
+    "quality": 32,
+    "pixel_format": "yuv420p10le",
+    "tune": 0,
+    "lp": 4,
+    "encoder_parameters": {
+      "enable-qm": 1,
+      "qm-min": 8,
+      "qm-max": 15,
+      "hierarchical-levels": 4
+    }
+  },
+  "share": {
+    "avc": {
+      "encoder": "h264_qsv",
+      "preset": "4",
+      "quality": 22,
+      "async_depth": 4
+    },
+    "hevc": {
+      "encoder": "hevc_qsv",
+      "preset": "4",
+      "quality": 24,
+      "async_depth": 4
+    },
+    "av1": {
+      "encoder": "av1_qsv",
+      "preset": "4",
+      "quality": 26,
+      "async_depth": 4
+    }
+  },
+  "audio": {
+    "archive_default": "copy",
+    "share_default": {
+      "avc": "aac",
+      "hevc": "aac",
+      "av1": "opus"
+    },
+    "aac": {
+      "encoder": "aac",
+      "bitrate_kbps": 256,
+      "channels": 2,
+      "sample_rate": "source"
+    },
+    "opus": {
+      "encoder": "libopus",
+      "bitrate_kbps": 192,
+      "channels": 2,
+      "sample_rate": 48000,
+      "vbr": "on",
+      "application": "audio",
+      "compression_level": 10
+    },
+    "av1_compatibility_audio": "aac",
+    "note": "有损预设为双声道；AV1默认Opus192K，另保留AAC256K兼容项。归档默认复制全部原音轨。音频不与视频编码器技术绑定。"
+  }
+}
