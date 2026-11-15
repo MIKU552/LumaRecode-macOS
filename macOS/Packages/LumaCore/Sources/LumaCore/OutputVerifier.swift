@@ -70,10 +70,16 @@ public enum OutputVerifier {
         try require(!encoded.dynamicHDR,
                     "Output unexpectedly contains dynamic HDR metadata.")
         if source.staticHDRMetadataPresent {
-            // This path is presently blocked before encoding. Keep the
-            // verification guard for callers constructing plans directly.
-            try require(encoded.staticHDRMetadataPresent,
-                        "Source static HDR mastering/light-level metadata was lost.")
+            // FFprobe reports SI rational values. Compare within one target
+            // HEVC SEI quantization step (1/50000 chroma, 1/10000 cd/m²).
+            guard let expected = source.hdrStaticMetadata,
+                  let actual = encoded.hdrStaticMetadata else {
+                throw LumaError.validationFailed(
+                    "Source or output HDR10 Mastering Display / MaxCLL metadata is missing or incomplete."
+                )
+            }
+            try require(encoded.staticHDRMetadataPresent && expected.equivalent(to: actual),
+                        "Encoded HDR10 mastering display or content light values differ from the source.")
         }
         let sourceAudio = source.audioCodecs
         let outputAudio = encoded.audioCodecs

@@ -50,11 +50,25 @@ public enum EncodingPlanner {
             throw LumaError.invalidInput("Input and output must not be the same file.")
         }
         let resolved = try VideoOutputPolicy.resolve(media, selection: selection)
-        guard !media.staticHDRMetadataPresent else {
-            throw LumaError.unsupported(
-                "Mastering Display / MaxCLL preservation is not yet implemented in the macOS encoder. "
-                + "This source is blocked until static HDR metadata can be carried and verified."
-            )
+        // Mirror Windows Transcoder.HdrMetadata. Static HDR10 SEI is allowed
+        // only on the validated software HEVC PQ path. Incomplete side data
+        // and all unverified hardware/AV1/Log combinations remain blocked.
+        let staticHDR: HDRStaticMetadata?
+        if media.staticHDRMetadataPresent {
+            guard media.sourceColor == .pq, selection.logProfile == nil,
+                  selection.purpose == .archive, selection.codec == .hevc else {
+                throw LumaError.unsupported(
+                    "HDR10 Mastering Display / MaxCLL preservation currently requires software HEVC archiving of PQ video."
+                )
+            }
+            guard let parsed = media.hdrStaticMetadata else {
+                throw LumaError.unsupported(
+                    "HDR10 metadata was detected but could not be parsed consistently. Refusing to lose it."
+                )
+            }
+            staticHDR = parsed
+        } else {
+            staticHDR = nil
         }
         guard media.bitDepth <= 12 else {
             throw LumaError.unsupported(
@@ -153,6 +167,9 @@ public enum EncodingPlanner {
                     ]
                 }
                 params.append("range=\(resolved.sampleRange == "full" ? "full" : "limited")")
+                if let staticHDR {
+                    params += try staticHDR.hevcParameters()
+                }
                 args += ["-x265-params", params.joined(separator: ":")]
             case .avc:
                 let params = preset.parameters.keys.sorted().map {
