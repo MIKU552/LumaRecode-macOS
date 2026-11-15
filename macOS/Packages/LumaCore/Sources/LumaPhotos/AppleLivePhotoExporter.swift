@@ -239,19 +239,17 @@ public enum AppleLivePhotoExporter {
         do {
             try writer.start()
             writer.startSession(atSourceTime: .zero)
-            // AVAssetWriter may wait for the first video/audio sample before
-            // admitting timed metadata. Do not await the metadata receiver
-            // before the muxer has any media: run both producer paths together.
-            diagnostics("begin concurrent timed metadata and media append")
-            async let metadataWrite: Void = metadataReceiver.append(timedGroup)
+            // Keep receiver ownership within this task (strict Swift 6).
+            // appendImmediately is non-suspending and never sends the
+            // non-Sendable AVFoundation receiver to a child task.
+            diagnostics("begin single-task timed metadata and media append")
             try await copyInterleaved(
                 videoOutput: trackOutput, videoInput: videoInput,
-                audioOutput: audioOutput, audioInput: audioInput, writer: writer
+                audioOutput: audioOutput, audioInput: audioInput,
+                metadataReceiver: metadataReceiver, timedGroup: timedGroup,
+                writer: writer
             )
-            diagnostics("media samples written")
-            try await metadataWrite
-            metadataReceiver.finish()
-            diagnostics("timed metadata receiver append finished")
+            diagnostics("media samples and timed metadata written")
             guard reader.status == .completed else {
                 throw LumaError.processFailed(
                     reader.error?.localizedDescription ?? "Live Photo media reader did not finish."
@@ -274,8 +272,14 @@ public enum AppleLivePhotoExporter {
     private static func copyInterleaved(
         videoOutput: AVAssetReaderTrackOutput, videoInput: AVAssetWriterInput,
         audioOutput: AVAssetReaderTrackOutput?,
-        audioInput: AVAssetWriterInput?, writer: AVAssetWriter
+        audioInput: AVAssetWriterInput?,
+        metadataReceiver: AVAssetWriterInput.MetadataReceiver,
+        timedGroup: AVTimedMetadataGroup, writer: AVAssetWriter
     ) async throws {
+        // Metadata is appended before the corresponding sample timestamp;
+        // retry during writing if the muxer is not yet ready.
+        var metadataWritten = try metadataReceiver.appendImmediately(timedGroup)
+        diagnostics("timed metadata initially accepted: \(metadataWritten)")
         var video = videoOutput.copyNextSampleBuffer()
         var audio = audioOutput?.copyNextSampleBuffer()
         var videoCount = 0
@@ -304,7 +308,17 @@ public enum AppleLivePhotoExporter {
                 audioCount += 1
                 audio = audioOutput?.copyNextSampleBuffer()
             }
+            if !metadataWritten {
+                metadataWritten = try metadataReceiver.appendImmediately(timedGroup)
+            }
         }
+        guard metadataWritten else {
+            throw LumaError.validationFailed(
+                "QuickTime metadata receiver never accepted the Live Photo still-image-time."
+            )
+        }
+        metadataReceiver.finish()
+        diagnostics("timed metadata accepted by QuickTime MOV writer")
         videoInput.markAsFinished()
         audioInput?.markAsFinished()
         guard videoCount > 0, audioOutput == nil || audioCount > 0 else {
@@ -377,20 +391,28 @@ public enum LivePhotoPairVerifier {
         }
         defer { reader.cancelReading() }
         var matchingTime = false
+        var observed = [String]()
         while let group = adaptor.nextTimedMetadataGroup() {
-            if group.items.contains(where: {
-                $0.keySpace?.rawValue == "mdta"
-                    && ($0.key as? String) == "com.apple.quicktime.still-image-time"
-            }) {
-                let position = CMTimeGetSeconds(group.timeRange.start)
-                if abs(position - expectedStillTime) <= 0.05 {
+            let position = CMTimeGetSeconds(group.timeRange.start)
+            for item in group.items {
+                let key = item.key.map { String(describing: $0) } ?? "(nil)"
+                let space = item.keySpace?.rawValue ?? "(nil)"
+                if observed.count < 8 {
+                    observed.append("keySpace=\(space),key=\(key),t=\(position)")
+                }
+                let canonical = item.identifier?.rawValue
+                    == "mdta/com.apple.quicktime.still-image-time"
+                let legacy = space == "mdta"
+                    && key == "com.apple.quicktime.still-image-time"
+                if (canonical || legacy) && abs(position - expectedStillTime) <= 0.05 {
                     matchingTime = true
                 }
             }
         }
         guard matchingTime else {
             throw LumaError.validationFailed(
-                "Live Photo still-image-time was missing or not aligned with the JPEG poster."
+                "Live Photo timed metadata was not aligned: expected \(expectedStillTime)s, "
+                + "observed \(observed); reader=\(reader.status.rawValue)."
             )
         }
     }
