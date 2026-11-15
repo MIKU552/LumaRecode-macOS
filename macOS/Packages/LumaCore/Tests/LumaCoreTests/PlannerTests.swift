@@ -29,8 +29,48 @@ final class PlannerTests: XCTestCase {
         )
         XCTAssertTrue(plan.arguments.contains("libx265"))
         XCTAssertTrue(plan.arguments.contains("23"))
-        XCTAssertTrue(plan.arguments.contains("pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1"))
+        XCTAssertTrue(plan.arguments.contains(
+            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt709:transfer=bt709:colormatrix=bt709"
+        ))
         XCTAssertTrue(plan.arguments.contains("copy"))
+    }
+    func testSoftwareHEVCSignalsPQInBitstream() throws {
+        var input = media(color: .pq, depth: 10)
+        input.primaries = "bt2020"
+        input.transfer = "smpte2084"
+        input.matrix = "bt2020nc"
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: input,
+            selection: EncodeSelection(purpose: .archive, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/hdr-output.mkv")
+        )
+        XCTAssertTrue(plan.arguments.contains(
+            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
+        ))
+        XCTAssertTrue(plan.arguments.contains("-color_trc"))
+        XCTAssertTrue(plan.arguments.contains("smpte2084"))
+    }
+    func testSoftwareHEVCSignalsHLGInBitstream() throws {
+        var input = media(color: .hlg, depth: 10)
+        input.primaries = "bt2020"
+        input.transfer = "arib-std-b67"
+        input.matrix = "bt2020nc"
+        let plan = try EncodingPlanner.plan(
+            tools: tools(), media: input,
+            selection: EncodeSelection(purpose: .archive, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/hlg-output.mkv")
+        )
+        XCTAssertTrue(plan.arguments.contains(
+            "pools=16:log-level=warning:rdoq-level=2:psy-rdoq=1:colorprim=bt2020:transfer=arib-std-b67:colormatrix=bt2020nc"
+        ))
+    }
+    func testRejectsInconsistentHDRColorimetry() throws {
+        let input = media(color: .pq, depth: 10) // Claims PQ, but is tagged BT.709.
+        XCTAssertThrowsError(try EncodingPlanner.plan(
+            tools: tools(), media: input,
+            selection: EncodeSelection(purpose: .archive, codec: .hevc),
+            destination: URL(fileURLWithPath: "/tmp/unverified-hdr.mkv")
+        ))
     }
     func testBlocksUnportedDynamicHDR() throws {
         XCTAssertThrowsError(try EncodingPlanner.plan(
