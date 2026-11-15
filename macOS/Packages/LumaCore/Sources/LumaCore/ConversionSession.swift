@@ -60,6 +60,11 @@ public final class ConversionSession: @unchecked Sendable {
         }
         defer { try? fm.removeItem(at: plan.temporary) }
         if isCancelled() { throw LumaError.cancelled }
+        // Validate executable/filter availability first: do not spend hours
+        // scanning a movie when the user selected an incompatible FFmpeg.
+        onPhase(.checkingTools)
+        try await MediaRequirements.check(tools: tools, plan: plan)
+        if isCancelled() { throw LumaError.cancelled }
         if ["hevc", "av1"].contains(source.codec) { onPhase(.auditingSource) }
         // MediaProbe samples initial frames for UI responsiveness. A complete
         // preflight is mandatory when encoding codecs that may carry HDR10+
@@ -69,9 +74,6 @@ public final class ConversionSession: @unchecked Sendable {
             onProcess: { [weak self] process in self?.setProcess(process) },
             isCancelled: { [weak self] in self?.isCancelled() ?? true }
         )
-        if isCancelled() { throw LumaError.cancelled }
-        onPhase(.checkingTools)
-        try await MediaRequirements.check(tools: tools, plan: plan)
         if isCancelled() { throw LumaError.cancelled }
         onPhase(.encoding)
         try await run(plan: plan, duration: progressDuration ?? source.duration, onProgress: onProgress)
