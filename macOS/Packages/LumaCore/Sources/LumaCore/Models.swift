@@ -55,12 +55,22 @@ public struct MediaInfo: Codable, Equatable, Sendable {
     public var sourceColor: SourceColor
     public var dynamicHDR: Bool
     public var dynamicHDRDescription: String?
+    /// Absolute ffprobe stream index, not video-stream ordinal. Handles cover art.
+    public var videoStreamIndex: Int
+    /// QuickTime/MP4 video sample entry, e.g. hvc1 vs hev1.
+    public var codecTag: String
+    /// Display Matrix rotation, as reported by ffprobe.
+    public var displayRotation: Double
+    /// Source mastering display / content light level metadata is not yet writable.
+    public var staticHDRMetadataPresent: Bool
 
     public init(
         url: URL, codec: String, width: Int, height: Int, duration: Double,
         frameRate: Double, pixelFormat: String, bitDepth: Int, primaries: String,
         transfer: String, matrix: String, colorRange: String, audioCodecs: [String],
-        sourceColor: SourceColor, dynamicHDR: Bool, dynamicHDRDescription: String? = nil
+        sourceColor: SourceColor, dynamicHDR: Bool, dynamicHDRDescription: String? = nil,
+        videoStreamIndex: Int = 0, codecTag: String = "", displayRotation: Double = 0,
+        staticHDRMetadataPresent: Bool = false
     ) {
         self.url = url; self.codec = codec; self.width = width; self.height = height
         self.duration = duration; self.frameRate = frameRate; self.pixelFormat = pixelFormat
@@ -68,6 +78,10 @@ public struct MediaInfo: Codable, Equatable, Sendable {
         self.matrix = matrix; self.colorRange = colorRange; self.audioCodecs = audioCodecs
         self.sourceColor = sourceColor; self.dynamicHDR = dynamicHDR
         self.dynamicHDRDescription = dynamicHDRDescription
+        self.videoStreamIndex = videoStreamIndex
+        self.codecTag = codecTag
+        self.displayRotation = displayRotation
+        self.staticHDRMetadataPresent = staticHDRMetadataPresent
     }
 }
 
