@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "LumaCore",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "LumaCore", targets: ["LumaCore"]),
         .executable(name: "lumarecode", targets: ["LumaCLI"])
