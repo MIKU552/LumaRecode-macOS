@@ -258,7 +258,7 @@ public enum AppleLivePhotoExporter {
             try Task.checkCancellation()
             let writeVideo: Bool
             switch (video, audio) {
-            case (nil, nil): break
+            case (nil, nil): continue
             case (_?, nil): writeVideo = true
             case (nil, _?): writeVideo = false
             case (let v?, let a?):
