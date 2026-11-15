@@ -53,7 +53,7 @@ struct PhotoWorkspace: View {
             Spacer()
         }
         .padding(24)
-        .onChange(of: model.sourceURL) { _ in seconds = 0 }
+        .onChange(of: model.sourceURL) { _, _ in seconds = 0 }
     }
 
     private func chooseDestination(source: URL) {

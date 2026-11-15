@@ -26,7 +26,7 @@ struct EncodingInspector: View {
                         }
                     }
                 }
-                .onChange(of: model.selection.purpose) { purpose in
+                .onChange(of: model.selection.purpose) { _, purpose in
                     if purpose == .share && model.selection.codec == .av1 {
                         model.selection.codec = .hevc
                     }

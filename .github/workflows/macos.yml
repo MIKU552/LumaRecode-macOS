@@ -25,6 +25,45 @@ jobs:
       - name: Run Swift core tests
         run: swift test --package-path macOS/Packages/LumaCore
 
+  media-smoke:
+    name: Real FFmpeg Software Transcode Smoke Test
+    needs: core-tests
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native macOS FFmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            brew install ffmpeg
+          fi
+          ffmpeg -version | head -n 1
+          ffmpeg -hide_banner -encoders | grep -E 'libx264|libx265'
+      - name: Build Swift CLI
+        run: swift build --package-path macOS/Packages/LumaCore --configuration release --product lumarecode
+      - name: Probe, plan, convert, and verify synthetic SDR video
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="${RUNNER_TEMP}/luma-media-smoke"
+          mkdir -p "$WORK"
+          CLI="$(swift build --package-path macOS/Packages/LumaCore --configuration release --show-bin-path)/lumarecode"
+          SRC="$WORK/source.mp4"
+          OUT="$WORK/archive.mkv"
+          ffmpeg -hide_banner -loglevel error -f lavfi             -i 'testsrc2=duration=0.7:size=160x90:rate=24'             -f lavfi -i 'sine=frequency=440:duration=0.7'             -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac -y "$SRC"
+          "$CLI" probe "$SRC" --json > "$WORK/probe.json"
+          grep -q '"sourceColor" : "sdr"' "$WORK/probe.json" || grep -q '"sourceColor":"sdr"' "$WORK/probe.json"
+          "$CLI" plan "$SRC" --codec hevc --purpose archive --output "$OUT" > "$WORK/plan.jsonl"
+          grep -q '"event":"plan"' "$WORK/plan.jsonl"
+          "$CLI" convert "$SRC" --codec hevc --purpose archive --output "$OUT" --json > "$WORK/events.jsonl"
+          test -s "$OUT"
+          codec="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1:nk=1 "$OUT")"
+          test "$codec" = "hevc"
+          count="$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$OUT" | wc -l | tr -d ' ')"
+          test "$count" -eq 1
+          grep -q '"event":"done"' "$WORK/events.jsonl"
+          echo "Software HEVC encode, audio preservation, output verification, and CLI JSON events passed."
+
   native-app:
     name: Build Native SwiftUI App + CLI
     needs: core-tests

@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 /// Exports *SDR* frames using Apple's system frameworks. HDR HEIC gain-map
 /// export is intentionally not claimed until proper HDR pipeline verification.
-enum StillFormat: String, CaseIterable, Identifiable {
+enum StillFormat: String, CaseIterable, Identifiable, Sendable {
     case heic, jpeg, png
     var id: String { rawValue }
     var label: String {
@@ -39,10 +39,11 @@ enum StillExporter {
             generator.appliesPreferredTrackTransform = true
             generator.requestedTimeToleranceBefore = .zero
             generator.requestedTimeToleranceAfter = .zero
-            let frame = try generator.copyCGImage(
-                at: CMTime(seconds: seconds, preferredTimescale: 600),
-                actualTime: nil
+            // The async AVFoundation API replaces deprecated synchronous copyCGImage.
+            let generated = try await generator.image(
+                at: CMTime(seconds: seconds, preferredTimescale: 600)
             )
+            let frame = generated.image
             let temp = destination.deletingLastPathComponent().appendingPathComponent(
                 ".luma-\(UUID().uuidString).\(format.rawValue)"
             )

@@ -17,7 +17,7 @@ public enum LumaError: LocalizedError {
     }
 }
 
-public enum VideoCodec: String, Codable, CaseIterable, Identifiable {
+public enum VideoCodec: String, Codable, CaseIterable, Identifiable, Sendable {
     case hevc, avc, av1
     public var id: String { rawValue }
     public var title: String {
@@ -28,17 +28,17 @@ public enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-public enum EncodePurpose: String, Codable, CaseIterable, Identifiable {
+public enum EncodePurpose: String, Codable, CaseIterable, Identifiable, Sendable {
     case archive, share
     public var id: String { rawValue }
 }
 
-public enum SourceColor: String, Codable {
+public enum SourceColor: String, Codable, Sendable {
     case sdr, hlg, pq, log, raw, unknown
     public var isHDR: Bool { self == .hlg || self == .pq }
 }
 
-public struct MediaInfo: Codable, Equatable {
+public struct MediaInfo: Codable, Equatable, Sendable {
     public var url: URL
     public var codec: String
     public var width: Int
@@ -71,7 +71,7 @@ public struct MediaInfo: Codable, Equatable {
     }
 }
 
-public struct EncodeSelection: Codable, Equatable {
+public struct EncodeSelection: Codable, Equatable, Sendable {
     public var purpose: EncodePurpose
     public var codec: VideoCodec
     public init(purpose: EncodePurpose = .archive, codec: VideoCodec = .hevc) {
@@ -79,7 +79,7 @@ public struct EncodeSelection: Codable, Equatable {
     }
 }
 
-public struct EncodingPlan {
+public struct EncodingPlan: Sendable {
     public let executable: URL
     public let arguments: [String]
     public let destination: URL
@@ -89,7 +89,7 @@ public struct EncodingPlan {
     public let inputColor: SourceColor
 }
 
-public struct TranscodeProgress: Equatable {
+public struct TranscodeProgress: Equatable, Sendable {
     public let seconds: Double
     public let duration: Double
     public let fraction: Double

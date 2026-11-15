@@ -40,7 +40,7 @@ public struct MediaTools {
 }
 
 public enum CommandCapture {
-    public struct Output {
+    public struct Output: Sendable {
         public let code: Int32
         public let stdout: Data
         public let stderr: Data
@@ -53,6 +53,16 @@ public enum CommandCapture {
         limit: Int = 8 * 1024 * 1024
     ) async throws -> Output {
         try await Task.detached(priority: .userInitiated) {
+            try blockingRun(executable, arguments, timeout: timeout, limit: limit)
+        }.value
+    }
+
+    // Keep synchronous process and DispatchGroup waits out of the async function.
+    // The detached task provides the asynchronous boundary for callers.
+    private static func blockingRun(
+        _ executable: URL, _ arguments: [String], timeout: TimeInterval,
+        limit: Int
+    ) throws -> Output {
             let process = Process()
             process.executableURL = executable
             process.arguments = arguments
@@ -90,6 +100,5 @@ public enum CommandCapture {
                 throw LumaError.processFailed(String(data: err, encoding: .utf8) ?? "Command failed.")
             }
             return Output(code: process.terminationStatus, stdout: out, stderr: err)
-        }.value
     }
 }

@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | SwiftUI 原生工作区 | 已提交，待 CI | macOS 27 Xcode 编译，原生 Sidebar/Inspector/Settings |
 | FFprobe 素材探测 | 初版 | 与 Windows 详细探测结果逐字段对比 |
-| x264/x265/SVT-AV1 软件编码 | 初版 | 同一素材的命令参数、色彩标签、采样、音轨验证 |
+| x264/x265/SVT-AV1 软件编码 | 初版，新增 HEVC 软件转码 CI 冒烟测试 | 同一素材的命令参数、色彩标签、采样、音轨验证 |
 | VideoToolbox H.264/HEVC | 初版 | Mac 设备兼容、编码质量与文件体积实测 |
 | AVKit 预览 | 初版 | 非原生解码素材的后备方案、HDR 预览实测 |
 | FFmpeg 进度/取消/临时输出 | 初版 | 失败、信号、覆盖、磁盘不足和长任务测试 |
