@@ -66,6 +66,8 @@ public struct MediaInfo: Codable, Equatable, Sendable {
     /// FFmpeg rational timestamp time base for exact display-frame indexing.
     public var timeBase: String
     public var isInterlaced: Bool
+    /// Only evidence-backed camera profiles are automatically suggested.
+    public var detectedLogProfile: CameraLogProfile?
 
     public init(
         url: URL, codec: String, width: Int, height: Int, duration: Double,
@@ -74,7 +76,8 @@ public struct MediaInfo: Codable, Equatable, Sendable {
         sourceColor: SourceColor, dynamicHDR: Bool, dynamicHDRDescription: String? = nil,
         videoStreamIndex: Int = 0, codecTag: String = "", displayRotation: Double = 0,
         staticHDRMetadataPresent: Bool = false,
-        timeBase: String = "", isInterlaced: Bool = false
+        timeBase: String = "", isInterlaced: Bool = false,
+        detectedLogProfile: CameraLogProfile? = nil
     ) {
         self.url = url; self.codec = codec; self.width = width; self.height = height
         self.duration = duration; self.frameRate = frameRate; self.pixelFormat = pixelFormat
@@ -88,6 +91,7 @@ public struct MediaInfo: Codable, Equatable, Sendable {
         self.staticHDRMetadataPresent = staticHDRMetadataPresent
         self.timeBase = timeBase
         self.isInterlaced = isInterlaced
+        self.detectedLogProfile = detectedLogProfile
     }
 }
 
@@ -120,6 +124,11 @@ public struct EncodeSelection: Codable, Equatable, Sendable {
     public var colorRange: SampleRangeChoice
     public var audio: AudioChoice
     public var variant: EncodingVariant
+    /// Explicit camera Log -> Rec.2100 HLG transform using original LUT.
+    /// nil preserves the existing no-transform path.
+    public var logProfile: CameraLogProfile?
+    /// Manual interpretation is needed when camera Log metadata is absent.
+    public var interpretAsLog: Bool
 
     public init(
         purpose: EncodePurpose = .archive, codec: VideoCodec = .hevc,
@@ -127,7 +136,9 @@ public struct EncodeSelection: Codable, Equatable, Sendable {
         bitDepth: BitDepthChoice = .automatic,
         colorRange: SampleRangeChoice = .automatic,
         audio: AudioChoice = .automatic,
-        variant: EncodingVariant = .standard
+        variant: EncodingVariant = .standard,
+        logProfile: CameraLogProfile? = nil,
+        interpretAsLog: Bool = false
     ) {
         self.purpose = purpose
         self.codec = codec
@@ -136,6 +147,8 @@ public struct EncodeSelection: Codable, Equatable, Sendable {
         self.colorRange = colorRange
         self.audio = audio
         self.variant = variant
+        self.logProfile = logProfile
+        self.interpretAsLog = interpretAsLog
     }
 }
 
