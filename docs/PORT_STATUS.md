@@ -35,3 +35,7 @@
 ## 下一步
 
 先让 macOS 27 Actions 完成 Swift 测试、Xcode 编译、生成开发版 Artifact，解决实际编译差异。之后逐模块增加回归测试和未实现的 HDR/RAW/Live Photo 能力。
+
+## 2026-11-15 Swift 6.4 迁移
+
+已检测 Xcode 27.1 上的 Apple Swift 6.4。核心 Package 与 SwiftUI App 正在从 Swift 5 语言模式迁移至 Swift 6 严格并发语言模式，使用 `Synchronization.Mutex` 防止输出读取竞争。**待 CI 确认编译通过**。

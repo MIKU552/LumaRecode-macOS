@@ -66,3 +66,7 @@ open macOS/LumaRecode.xcodeproj
 项目独立重写，功能与软件预设以 [LumaRecode](https://github.com/MIKU552/LumaRecode)（MIT）为基准。第三方 FFmpeg 编解码组件与 Apple 平台组件保留各自许可要求。最终随发行版包含完整第三方声明和适用许可证。
 
 项目状态与测试结果请以本仓库的 Actions 为准。
+
+## Swift 6.4 / 严格并发
+
+使用 Xcode 27.1 的 Swift 6.4 编译器，Swift Package 启用 `swift-tools-version: 6.4` 与 Swift 6 语言模式，Xcode 工程设置 `SWIFT_VERSION: 6.0`（语言模式名称，**不是** 6.0 编译器版本）。已开始处理 Swift 6 严格并发诊断；最终兼容性须经后续 CI 验证。

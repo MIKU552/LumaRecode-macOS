@@ -111,7 +111,7 @@ final class WorkspaceModel: ObservableObject {
                     plan: plan, tools: tools, source: media,
                     overwrite: FileManager.default.fileExists(atPath: outputURL.path),
                     onProgress: { [weak self] update in
-                        Task { @MainActor [weak self] in self?.progress = update }
+                        Task { @MainActor in self?.progress = update }
                     }
                 )
                 status = "转换完成"

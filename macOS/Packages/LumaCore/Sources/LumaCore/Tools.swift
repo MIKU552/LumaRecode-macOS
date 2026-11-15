@@ -1,6 +1,7 @@
 import Foundation
+import Synchronization
 
-public struct MediaTools {
+public struct MediaTools: Sendable {
     public let ffmpeg: URL
     public let ffprobe: URL
 
@@ -73,19 +74,18 @@ public enum CommandCapture {
             try process.run()
             // Read both pipes concurrently to prevent blocking on a full pipe.
             let group = DispatchGroup()
-            let lock = NSLock()
-            var out = Data()
-            var err = Data()
+            let out = Mutex(Data())
+            let err = Mutex(Data())
             group.enter()
             DispatchQueue.global().async {
                 let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                lock.lock(); out = Data(data.prefix(limit + 1)); lock.unlock()
+                out.withLock { $0 = Data(data.prefix(limit + 1)) }
                 group.leave()
             }
             group.enter()
             DispatchQueue.global().async {
                 let data = stderr.fileHandleForReading.readDataToEndOfFile()
-                lock.lock(); err = Data(data.suffix(64 * 1024)); lock.unlock()
+                err.withLock { $0 = Data(data.suffix(64 * 1024)) }
                 group.leave()
             }
             let watchdog = DispatchWorkItem {
@@ -95,10 +95,12 @@ public enum CommandCapture {
             process.waitUntilExit()
             watchdog.cancel()
             group.wait()
-            if out.count > limit { throw LumaError.processFailed("Command output exceeded safety limit.") }
+            let stdoutData = out.withLock { $0 }
+            let stderrData = err.withLock { $0 }
+            if stdoutData.count > limit { throw LumaError.processFailed("Command output exceeded safety limit.") }
             guard process.terminationStatus == 0 else {
-                throw LumaError.processFailed(String(data: err, encoding: .utf8) ?? "Command failed.")
+                throw LumaError.processFailed(String(data: stderrData, encoding: .utf8) ?? "Command failed.")
             }
-            return Output(code: process.terminationStatus, stdout: out, stderr: err)
+            return Output(code: process.terminationStatus, stdout: stdoutData, stderr: stderrData)
     }
 }
