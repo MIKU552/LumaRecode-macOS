@@ -59,3 +59,7 @@ Actions #9 中 Xcode / Swift 严格并发编译、单元测试、SDR 软件 HEVC
 ## Swift 原生架构决定（2026-11-15）
 
 原版 Windows 项目提供参数、格式边界及测试样本方面的权威基准，而**不决定 Mac 版的 UI / 运行时架构**。当前 macOS App 已采用 Swift 6.4.2 / Swift 6、SwiftUI `NavigationSplitView`、macOS 原生 Inspector、`@Observable`（Observation）共享状态、Apple AVKit / Core Image / ImageIO；独立 Swift Package 负责媒体规则，FFmpeg 参数由源配置驱动。SwiftUI 不复刻 WinUI，工具进程不依赖 .NET。仍需基于新 Actions 验证这次 Observation 迁移。
+
+## Homebrew ffmpeg-full 依赖和输出验收
+
+Actions #28 的核心单元测试、原生 App 构建、双音轨复制 / Opus 重新编码、非法色度升采样拒绝、真实 PTS 时间轴读取均已通过对应步骤。Full→Limited 范围转换因普通 Homebrew FFmpeg 缺少 zscale 被能力预检拒绝。CI 已改为安装 keg-only 的 `ffmpeg-full` 并将其置于 PATH 前列，明确验证 zscale 存在；Mac App 也优先发现它。完整 CI 结果需以后续运行为准。

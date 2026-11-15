@@ -11,7 +11,7 @@
 - **软件归档预设**：x264 medium/CRF21、x265 medium/CRF23、SVT-AV1 preset4/CRF32；保留原仓库相关软件编码器参数的初始版本。
 - **快速分享**：FFmpeg VideoToolbox H.264/HEVC，候选质量值 70/65；使用 \`-allow_sw 0\` 防止硬件模式悄悄退化为软件编码。不宣称质量已实测验证。
 - SDR 静态照片：使用 AVFoundation + ImageIO 输出 HEIC、JPEG、PNG。
-- 原生 Swift CLI：\`doctor\`、\`probe\`、\`plan\`、\`convert\` 初步实现。
+- 原生 Swift CLI：\`doctor\`、\`probe\`、\`frames\`、\`plan\`、\`convert\` 初步实现。
 - macOS 27 / Xcode 27 GitHub Actions 自动生成 Xcode 工程、Swift 测试、构建 SwiftUI .app 和 CLI。
 
 ## 尚未移植（会拒绝不安全的处理）
@@ -19,8 +19,8 @@
 - Dolby Vision / HDR10+ 的逐帧元数据保留与转换。
 - DJI、Samsung、Xiaomi、Apple Log 及 Apple Log 2 色彩科学。
 - ProRes RAW 显影。
-- 可靠的逐帧 PTS 时间轴、逐帧裁剪与多帧预览渲染。
-- 原生 10-bit HDR HEIC、Apple HDR Gain Map、自适应 HDR HEIC。
+- 逐帧裁剪与多帧预览渲染（PTS 时间轴索引与 CLI 查询已实现）。
+- Apple HDR Gain Map、自适应 HDR HEIC（10-bit PQ HEIC 已有实验性版本）。
 - 原生 Live Photo（配对 HEIC / MOV、关联元数据和 PhotoKit）。
 - 完整的 CLI 参数和旧版 JSON 事件兼容、四语本地化、原生通知、全量媒体回归验证。
 
@@ -48,7 +48,7 @@ open macOS/LumaRecode.xcodeproj
 
 ## 运行依赖
 
-当前版本需要用户安装原生 macOS FFmpeg 和 ffprobe，并在设置中指定或从 \`PATH\` / \`/opt/homebrew/bin\` 自动发现。
+建议安装带有 `zscale` / `zimg` 的完整原生媒体工具：`brew install ffmpeg-full`。Homebrew 普通 `ffmpeg` 版本不一定包含 zscale，可能不支持采样范围转换。App 优先查找 keg-only 的 `/opt/homebrew/opt/ffmpeg-full/bin` 和 `/usr/local/opt/ffmpeg-full/bin`；也可以在设置中手动指定其他完整版本。
 
 软件编码器依赖 FFmpeg 构建中提供的 \`libx264\`、\`libx265\` 和 \`libsvtav1\`；硬件编码要求 \`h264_videotoolbox\` / \`hevc_videotoolbox\` 可用。某些 FFmpeg 构建没有完整的专业滤镜，请按具体功能检查能力。
 
@@ -69,7 +69,7 @@ open macOS/LumaRecode.xcodeproj
 
 ## Swift 6.4 / 严格并发
 
-使用 Xcode 27.1 的 Swift 6.4 编译器，Swift Package 启用 `swift-tools-version: 6.4` 与 Swift 6 语言模式，Xcode 工程设置 `SWIFT_VERSION: 6.0`（语言模式名称，**不是** 6.0 编译器版本）。已开始处理 Swift 6 严格并发诊断；最终兼容性须经后续 CI 验证。
+使用 Xcode 27.2 的 Swift 6.4.2 编译器，Swift Package 启用 `swift-tools-version: 6.4` 与 Swift 6 语言模式，Xcode 工程设置 `SWIFT_VERSION: 6.0`（语言模式名称，**不是** 6.0 编译器版本）。已开始处理 Swift 6 严格并发诊断；最终兼容性须经后续 CI 验证。
 
 ## HDR HEIC（Apple 原生、实验性）
 
