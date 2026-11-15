@@ -1,0 +1,20 @@
+LumaRecode for macOS
+Copyright 2026 MIKU552 and contributors.
+
+Original LumaRecode project content, including the independently developed
+camera Log tables, is distributed under the MIT License (see LICENSE).
+
+Third-party material retains its own copyright and license.
+
+DJI Pocket 3 D-Log M to Rec.2100 HLG LUT:
+  DJI_Osmo_DLogM_to_Rec2100_HLG_BT2408_Neutral.cube
+  Source: OpenOSV v0.6.4, https://github.com/Kemerd/OpenOSV
+  Copyright 2026 The OpenOSV Contributors.
+  License: Apache License 2.0.
+  The original LUT is copied without modification.
+  The complete upstream license and notice are bundled in LumaCore resources:
+    OpenOSV-LICENSE.txt
+    OpenOSV-NOTICE.txt
+
+See docs/THIRD_PARTY.md for source identities and SHA-256 checksums.
+FFmpeg / ffprobe are supplied by the user; not distributed with this app.

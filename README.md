@@ -88,7 +88,7 @@ open macOS/LumaRecode.xcodeproj
 
 本项目的发行版不会包含 FFmpeg、ffprobe 或其编解码器。用户自行安装，例如 `brew install ffmpeg-full`，也可在 macOS 系统「设置 → 媒体工具」中用原生文件选择器指定其他 FFmpeg/ffprobe 路径。设置页提供实际编码器与 `zscale` 滤镜能力诊断。
 
-项目根目录的 `LICENSE` 为 MIT，仅管理项目自身代码和资源。自行安装的 FFmpeg 及 x264/x265 等依赖遵守其各自许可。CI 使用 Homebrew 临时安装工具进行测试，构建 Artifact 不打包这些工具。
+项目根目录的 `LICENSE` 采用 MIT，覆盖项目自主代码与四份自制相机 Log LUT。**DJI Pocket 3 D-Log M LUT 来自 OpenOSV v0.6.4，原版为 Apache-2.0**；完整原始 LICENSE 和 NOTICE 随 App LUT 资源附带，并在 [第三方声明](docs/THIRD_PARTY.md) 和 [NOTICE](NOTICE) 中注明。自行安装的 FFmpeg 及 x264/x265 等依赖遵守其各自许可。CI 使用 Homebrew 临时安装工具进行测试，构建 Artifact 不打包这些工具。
 
 ## 精确逐帧裁剪（初版）
 
