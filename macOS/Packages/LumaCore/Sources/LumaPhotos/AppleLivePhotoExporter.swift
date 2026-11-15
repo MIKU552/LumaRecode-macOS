@@ -214,14 +214,13 @@ public enum AppleLivePhotoExporter {
             try await metadataReceiver.append(timedGroup)
             metadataReceiver.finish()
 
-            // Samples retain their decode order, as required for compressed
-            // B-frame passthrough. Each track is only a short 3-second clip.
-            try await copySamples(from: trackOutput, to: videoInput, writer: writer)
-            videoInput.markAsFinished()
-            if let audioOutput, let audioInput {
-                try await copySamples(from: audioOutput, to: audioInput, writer: writer)
-                audioInput.markAsFinished()
-            }
+            // Interleave compressed video and audio samples by their source
+            // decode timestamps. Feeding three seconds of video before
+            // writing any audio can deadlock AVAssetWriter's muxing buffers.
+            try await copyInterleaved(
+                videoOutput: trackOutput, videoInput: videoInput,
+                audioOutput: audioOutput, audioInput: audioInput, writer: writer
+            )
             guard reader.status == .completed else {
                 throw LumaError.processFailed(
                     reader.error?.localizedDescription ?? "Live Photo media reader did not finish."
@@ -240,30 +239,67 @@ public enum AppleLivePhotoExporter {
         }
     }
 
-    private static func copySamples(
-        from output: AVAssetReaderTrackOutput,
-        to input: AVAssetWriterInput, writer: AVAssetWriter
+    /// Write samples in decode timestamp order, preserving B-frame DTS.
+    private static func copyInterleaved(
+        videoOutput: AVAssetReaderTrackOutput, videoInput: AVAssetWriterInput,
+        audioOutput: AVAssetReaderTrackOutput?,
+        audioInput: AVAssetWriterInput?, writer: AVAssetWriter
     ) async throws {
-        var count = 0
-        while let sample = output.copyNextSampleBuffer() {
+        var video = videoOutput.copyNextSampleBuffer()
+        var audio = audioOutput?.copyNextSampleBuffer()
+        var videoCount = 0
+        var audioCount = 0
+
+        func decodeTime(_ sample: CMSampleBuffer) -> CMTime {
+            let dts = CMSampleBufferGetDecodeTimeStamp(sample)
+            return dts.isValid ? dts : CMSampleBufferGetPresentationTimeStamp(sample)
+        }
+        while video != nil || audio != nil {
             try Task.checkCancellation()
-            while !input.isReadyForMoreMediaData {
-                guard writer.status == .writing else {
-                    throw LumaError.processFailed(
-                        writer.error?.localizedDescription ?? "Live Photo writer stopped accepting samples."
-                    )
-                }
-                try await Task.sleep(for: .milliseconds(5))
+            let writeVideo: Bool
+            switch (video, audio) {
+            case (nil, nil): break
+            case (_?, nil): writeVideo = true
+            case (nil, _?): writeVideo = false
+            case (let v?, let a?):
+                writeVideo = CMTimeCompare(decodeTime(v), decodeTime(a)) <= 0
             }
-            guard input.append(sample) else {
+            if writeVideo, let sample = video {
+                try await append(sample, to: videoInput, writer: writer)
+                videoCount += 1
+                video = videoOutput.copyNextSampleBuffer()
+            } else if let sample = audio, let audioInput {
+                try await append(sample, to: audioInput, writer: writer)
+                audioCount += 1
+                audio = audioOutput?.copyNextSampleBuffer()
+            }
+        }
+        videoInput.markAsFinished()
+        audioInput?.markAsFinished()
+        guard videoCount > 0, audioOutput == nil || audioCount > 0 else {
+            throw LumaError.validationFailed(
+                "Live Photo movie has empty video or selected audio track."
+            )
+        }
+    }
+
+    private static func append(
+        _ sample: CMSampleBuffer, to input: AVAssetWriterInput,
+        writer: AVAssetWriter
+    ) async throws {
+        while !input.isReadyForMoreMediaData {
+            guard writer.status == .writing else {
                 throw LumaError.processFailed(
-                    writer.error?.localizedDescription ?? "Live Photo could not append a media sample."
+                    writer.error?.localizedDescription ?? "Live Photo writer stopped accepting samples."
                 )
             }
-            count += 1
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(5))
         }
-        guard count > 0 else {
-            throw LumaError.validationFailed("Live Photo movie stream contains no media samples.")
+        guard input.append(sample) else {
+            throw LumaError.processFailed(
+                writer.error?.localizedDescription ?? "Live Photo could not append a media sample."
+            )
         }
     }
 }
