@@ -32,6 +32,13 @@ struct LumaCLI {
           lumarecode plan INPUT [--codec hevc|avc|av1] [--purpose archive|share] [--output PATH]
           lumarecode convert INPUT [--codec ...] [--purpose ...] [--output PATH] [--overwrite] [--json]
 
+        Format policy (from Windows OutputPolicy):
+          --sampling auto|source|420|422|444|gray
+          --depth auto|8|10|12
+          --range auto|source|limited|full
+          --audio auto|copy|aac|opus
+          --fast  (software archive AV1 only)
+
         Unported features (HDR10+ and Dolby Vision preservation, Log/RAW development,
         frame-accurate trimming, Live Photos) are blocked rather than approximated.
         """)
@@ -74,7 +81,17 @@ struct LumaCLI {
                   let purpose = EncodePurpose(rawValue: purposeName) else {
                 throw LumaError.invalidInput("Invalid codec or purpose.")
             }
-            let selection = EncodeSelection(purpose: purpose, codec: codec)
+            guard let sampling = SamplingChoice(rawValue: value("--sampling", args: words) ?? "auto"),
+                  let depth = BitDepthChoice(rawValue: value("--depth", args: words) ?? "auto"),
+                  let range = SampleRangeChoice(rawValue: value("--range", args: words) ?? "auto"),
+                  let audio = AudioChoice(rawValue: value("--audio", args: words) ?? "auto") else {
+                throw LumaError.invalidInput("Invalid sampling, depth, range, or audio option.")
+            }
+            let selection = EncodeSelection(
+                purpose: purpose, codec: codec, sampling: sampling,
+                bitDepth: depth, colorRange: range, audio: audio,
+                variant: words.contains("--fast") ? .fast : .standard
+            )
             let destination: URL
             if let path = value("--output", args: words) {
                 destination = URL(fileURLWithPath: path).standardizedFileURL
@@ -90,7 +107,12 @@ struct LumaCLI {
                 emit("plan", ["argv": [plan.executable.path] + plan.arguments,
                               "output": destination.path,
                               "codec": selection.codec.rawValue,
-                              "purpose": selection.purpose.rawValue])
+                              "purpose": selection.purpose.rawValue,
+                              "sampling": selection.sampling.rawValue,
+                              "bit_depth": selection.bitDepth.rawValue,
+                              "color_range": selection.colorRange.rawValue,
+                              "audio": selection.audio.rawValue,
+                              "variant": selection.variant.rawValue])
                 return
             }
             let session = ConversionSession()

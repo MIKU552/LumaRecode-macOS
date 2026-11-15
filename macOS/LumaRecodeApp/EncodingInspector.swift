@@ -34,6 +34,13 @@ struct EncodingInspector: View {
                         if model.selection.codec == .av1 { model.selection.codec = .hevc }
                         model.selection.variant = .standard
                     }
+                    model.selection.sampling = .automatic
+                    model.selection.bitDepth = .automatic
+                }
+                .onChange(of: model.selection.codec) { _, codec in
+                    if codec != .av1 { model.selection.variant = .standard }
+                    model.selection.sampling = .automatic
+                    model.selection.bitDepth = .automatic
                 }
                 if model.selection.purpose == .archive {
                     LabeledContent("编码模式", value: "FFmpeg 软件")

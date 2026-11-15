@@ -55,3 +55,7 @@ Actions #9 中 Xcode / Swift 严格并发编译、单元测试、SDR 软件 HEVC
 ### CI #10: AVFoundation 容器兼容性
 
 已确认 HDR VUI 修复使源文件通过 BT.2020/PQ 检查；但 Runner 的 AVFoundation 阶段报出 `Cannot Decode`。合成测试 MP4 原先默认携带 `hev1` sample entry，而 Apple HLS 规范推荐 `hvc1`。下一轮测试将写入并校验 `hvc1`，并在 AVAssetReader、轨道加载、Core Image 写入阶段分别标注错误位置；仍须根据实际 CI 判断解码是否通过，不能仅凭标签推断成功。
+
+## Swift 原生架构决定（2026-11-15）
+
+原版 Windows 项目提供参数、格式边界及测试样本方面的权威基准，而**不决定 Mac 版的 UI / 运行时架构**。当前 macOS App 已采用 Swift 6.4.2 / Swift 6、SwiftUI `NavigationSplitView`、macOS 原生 Inspector、`@Observable`（Observation）共享状态、Apple AVKit / Core Image / ImageIO；独立 Swift Package 负责媒体规则，FFmpeg 参数由源配置驱动。SwiftUI 不复刻 WinUI，工具进程不依赖 .NET。仍需基于新 Actions 验证这次 Observation 迁移。
